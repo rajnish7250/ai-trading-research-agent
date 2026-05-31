@@ -1,0 +1,16 @@
+langchain
+langgraph
+langchain_groq
+langchain_community #Embedding integration
+langchain_tavily
+python-dotenv
+grandalf #Drawing and arranging graph structures visually
+yfinance
+pydantic
+IPython
+
+#RAG
+chromadb #Actual Vector Database
+langchain-chroma #Langchain Wrapper
+langchain-huggingface
+sentence-transformers #Embedding model
