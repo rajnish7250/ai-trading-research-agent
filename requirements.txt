@@ -1,16 +1,27 @@
 langchain
 langgraph
-langchain_groq
+
 langchain_community #Embedding integration
 langchain_tavily
-python-dotenv
 grandalf #Drawing and arranging graph structures visually
 yfinance
-pydantic
 IPython
 
-#RAG
+#Market Data
+yfinance
+
+##RAG
+#Vector DB
 chromadb #Actual Vector Database
 langchain-chroma #Langchain Wrapper
+#Embeddings
 langchain-huggingface
 sentence-transformers #Embedding model
+
+#LLM Providers
+langchain_groq
+langchain-google-genai
+
+#Utilities
+python-dotenv
+pydantic

@@ -87,20 +87,21 @@ graph_builder.add_edge(
 )
 graph_builder.add_edge(
     "chatbot",
-    "sentiment"
-)
-graph_builder.add_edge(
-    "sentiment",
-    "news_agent"
-)
-graph_builder.add_edge(
-    "news_agent",
-    "risk_agent"
-)
-graph_builder.add_edge(
-    "risk_agent",
+    # "sentiment"
     END
 )
+# graph_builder.add_edge(
+#     "sentiment",
+#     "news_agent"
+# )
+# graph_builder.add_edge(
+#     "news_agent",
+#     "risk_agent"
+# )
+# graph_builder.add_edge(
+#     "risk_agent",
+#     END
+# )
 # ---------------------------------------------------
 # MEMORY
 # ---------------------------------------------------

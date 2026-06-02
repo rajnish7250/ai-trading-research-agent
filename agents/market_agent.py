@@ -2,18 +2,15 @@
 import os
 from dotenv import load_dotenv
 
-from langchain_groq import ChatGroq
+
+from agents.llm_provider import get_llm
 from langchain_core.messages import SystemMessage
 
 from state.schemas import MarketSentiment
 
 load_dotenv()
 
-llm=ChatGroq(
-    model="llama-3.3-70b-versatile",
-    temperature=0,
-    streaming=True #It is used for streaming, we can see step by step tokens
-)
+llm=get_llm("groq")
 
 structured_llm=llm.with_structured_output(MarketSentiment)
 
