@@ -115,15 +115,12 @@ graph = graph_builder.compile(
 )
 
 # ---------------------------------------------------
-# VISUALIZATION
+# VISUALIZATION (run this file directly to preview the graph)
 # ---------------------------------------------------
 
-print(graph.get_graph().draw_ascii())
+if __name__ == "__main__":
+    print(graph.get_graph().draw_ascii())
 
-from IPython.display import (Image,display)
+    from IPython.display import Image, display
 
-display(
-    Image(
-        graph.get_graph().draw_mermaid_png()
-    )
-)
+    display(Image(graph.get_graph().draw_mermaid_png()))
