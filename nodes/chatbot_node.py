@@ -1,19 +1,17 @@
 #Creating Chatbot node
 from state.market_state import MarketState
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 from tools.market_tools import (
     search_tool, 
-    get_crypto_price
+    get_crypto_price, get_stock_price
 )
 
 from agents.market_agent import(llm, get_system_message)
 
 #Bind tools to LLM: LLM can't use tools by itself so need to bind. 
-tools=[
-    search_tool,
-    get_crypto_price]
+tools=[search_tool, get_crypto_price]
 
-llm_with_tools=llm.bind_tools(tools)
+llm_with_tools=llm.bind_tools(tools, tool_choice="auto")
 def chatbot_node(state:MarketState):
     
     messages=state["messages"]

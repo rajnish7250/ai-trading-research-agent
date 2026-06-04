@@ -1,3 +1,5 @@
+import warnings 
+warnings.filterwarnings("ignore", message=".*__path__.*")
 import uuid
 
 import streamlit as st

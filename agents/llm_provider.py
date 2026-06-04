@@ -12,10 +12,10 @@ def get_llm(provider="gemini"):
         )
     elif provider=="groq":
         return ChatGroq(
-            # model="llama-3.3-70b-versatile",
-            model="llama-3.1-8b-instant",
+            model="llama-3.3-70b-versatile",
+            # model="llama-3.1-8b-instant",
             temperature=0,
-            streaming=True 
+            streaming= False 
             )
     else:
         raise ValueError(f"Provider {provider} not supported")

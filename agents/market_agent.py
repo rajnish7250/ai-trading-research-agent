@@ -10,7 +10,7 @@ from state.schemas import MarketSentiment
 
 load_dotenv()
 
-llm=get_llm("groq")
+llm=get_llm("gemini")
 
 structured_llm=llm.with_structured_output(MarketSentiment)
 
@@ -24,9 +24,13 @@ Responsibilities:
 - Use tools whenever needed
 
 Guidelines:
-- Use crypto tool for prices
-- Use search tool for latest news
+- get_crypto_price: ONLY for crypto symbols ending in -USD (e.g. BTC-USD, ETH-USD)
+- search_market_news: for latest news, spot gold price, Indian stocks/ETFs, or when you don't know the exact ticker
+- If retrieved research context fully answers the question, reply directly WITHOUT calling tools
+- Never invent price numbers; use a tool or say you don't have live data
 - Keep responses concise
+- get_stock_price: for stocks and ETFs (e.g. TATAGOLD.NS for Tata Gold ETF on NSE)
+
 """
 
 def get_system_message():

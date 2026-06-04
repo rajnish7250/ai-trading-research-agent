@@ -15,6 +15,7 @@ yfinance
 chromadb #Actual Vector Database
 langchain-chroma #Langchain Wrapper
 #Embeddings
+torchvision
 langchain-huggingface
 sentence-transformers #Embedding model
 

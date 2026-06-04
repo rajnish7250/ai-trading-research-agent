@@ -15,17 +15,11 @@ from nodes.sentiment_node import sentiment_node
 from nodes.news_node import news_agent_node
 from nodes.risk_node import risk_agent_node
 # Tools
-from tools.market_tools import (
-    search_tool,
-    get_crypto_price
-)
+from tools.market_tools import (search_tool, get_crypto_price, get_stock_price)
 # ---------------------------------------------------
 # TOOLS
 # ---------------------------------------------------
-tools = [
-    search_tool,
-    get_crypto_price
-]
+tools = [search_tool, get_crypto_price, get_stock_price]
 tool_node = ToolNode(tools=tools)
 # ---------------------------------------------------
 # GRAPH BUILDER
