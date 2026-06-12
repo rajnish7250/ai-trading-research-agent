@@ -1,40 +1,47 @@
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
-from langchain_core.documents import Document
 from dotenv import load_dotenv
 load_dotenv()
 
 from memory.text_splitter import get_split_documents
+# =====================================================
+# LOAD ONCE AT APPLICATION STARTUP
+# =====================================================
+print("Loading Embedding Model...")
 
-#Step1- Creating Embedding Model
-#This model converts normal text into AI underastandable (vectors/number)
+embedding_model = HuggingFaceEmbeddings(
+    model_name="BAAI/bge-small-en-v1.5"
+)
 
+print("Initializing ChromaDB...")
+
+vector_db = Chroma(
+    collection_name="market_research",
+    embedding_function=embedding_model,
+    persist_directory="./chroma_db"
+)
+
+
+# =====================================================
+# GETTERS
+# =====================================================
 def get_embedding_model():
-    return HuggingFaceEmbeddings(
-        model_name="BAAI/bge-small-en-v1.5"
-    )
+    return embedding_model
 
 
 def get_vector_db():
-    embedding_model=get_embedding_model()
-    return Chroma(
-        collection_name="market_research",
-        embedding_function = embedding_model,
-        persist_directory="./chroma_db"
-    )
-#Used for deleteing entire memory in vector_db
-# vector_db.delete_collection()
+    return vector_db
 
 #Store documents
 def store_documents():
-    vector_db= get_vector_db()
+    # Used for deleteing entire memory in vector_db
+    # vector_db.delete_collection() 
+    
     split_docs = get_split_documents()
     vector_db.add_documents(split_docs)
+    print(f"Stored {len(split_docs)} documents")
+    
+
 
 if __name__ == "__main__":
     store_documents()
-
-
-
-
-    

@@ -7,12 +7,15 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from graphs.market_graph import graph
 
+from utils.response_parser import extract_response_text
+
 
 def _get_assistant_reply(result: dict) -> str:
+
     for message in reversed(result["messages"]):
-        if isinstance(message, AIMessage) and message.content:
-            return message.content
-    return "No response generated."
+        if isinstance(message, AIMessage):
+            return extract_response_text(message)
+        return "No Response Generated"
 
 
 st.set_page_config(

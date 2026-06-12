@@ -1,18 +1,16 @@
 #LLM Logic reasoning
 import os
 from dotenv import load_dotenv
-
-
-from agents.llm_provider import get_llm
 from langchain_core.messages import SystemMessage
-
 from state.schemas import MarketSentiment
 
-load_dotenv()
-
-llm=get_llm("gemini")
+from config import LLM_PROVIDER
+from agents.llm_provider import get_llm
+llm = get_llm(LLM_PROVIDER)
+print(f"Main Agent Using: {LLM_PROVIDER}")
 
 structured_llm=llm.with_structured_output(MarketSentiment)
+    
 
 SYSTEM_PROMPT = """
 You are an advanced AI Trading Research Assistant.

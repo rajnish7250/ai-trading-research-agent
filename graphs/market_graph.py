@@ -14,6 +14,9 @@ from nodes.retriever_node import retriever_node
 from nodes.sentiment_node import sentiment_node
 from nodes.news_node import news_agent_node
 from nodes.risk_node import risk_agent_node
+from nodes.memory_writer_node import memory_writer_node
+from nodes.summary_node import summary_node
+from nodes.memory_filter_node import memory_filter_node
 # Tools
 from tools.market_tools import (search_tool, get_crypto_price, get_stock_price)
 # ---------------------------------------------------
@@ -59,6 +62,19 @@ graph_builder.add_node(
     risk_agent_node
 )
 
+graph_builder.add_node(
+    "memory_writer",
+    memory_writer_node
+)
+
+graph_builder.add_node(
+    "summary",
+    summary_node
+)
+graph_builder.add_node(
+    "memory_filter",
+    memory_filter_node
+)
 # ---------------------------------------------------
 # GRAPH FLOW
 # ---------------------------------------------------
@@ -69,33 +85,36 @@ graph_builder.add_edge(
 )
 graph_builder.add_edge(
     "retriever",
-    "chatbot"
+    "news_agent"
 )
-graph_builder.add_conditional_edges(
-    "chatbot",
-    tools_condition
+
+graph_builder.add_edge(
+    "news_agent",
+    "sentiment"
+)
+
+graph_builder.add_edge(
+    "sentiment",
+    "risk_agent"
 )
 graph_builder.add_edge(
-    "tools",
-    "chatbot"
+    "risk_agent",
+    "summary"
 )
 graph_builder.add_edge(
-    "chatbot",
-    # "sentiment"
+    "summary",
+    "memory_filter"
+)
+graph_builder.add_edge(
+    "memory_filter",
+    "memory_writer"
+)
+
+graph_builder.add_edge(
+    "memory_writer",
     END
 )
-# graph_builder.add_edge(
-#     "sentiment",
-#     "news_agent"
-# )
-# graph_builder.add_edge(
-#     "news_agent",
-#     "risk_agent"
-# )
-# graph_builder.add_edge(
-#     "risk_agent",
-#     END
-# )
+
 # ---------------------------------------------------
 # MEMORY
 # ---------------------------------------------------

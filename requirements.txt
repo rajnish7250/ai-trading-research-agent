@@ -22,6 +22,7 @@ sentence-transformers #Embedding model
 #LLM Providers
 langchain_groq
 langchain-google-genai
+langchain-cerebras
 
 #Utilities
 python-dotenv

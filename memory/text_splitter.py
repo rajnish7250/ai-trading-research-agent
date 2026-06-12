@@ -69,14 +69,14 @@ text_splitter = RecursiveCharacterTextSplitter(
     ]
 )
 
-
+#Split Documents into chunks
+split_docs =text_splitter.split_documents(documents)
 
 def get_split_documents():
     return split_docs
 
 if __name__=="__main__":
-    #Split Documents into chunks
-    split_docs =text_splitter.split_documents(documents)
+    
     
     #Print chunks
     print(f"\n Total Chunks Created: {len(split_docs)}")

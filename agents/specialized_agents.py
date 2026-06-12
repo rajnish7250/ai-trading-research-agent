@@ -1,19 +1,11 @@
-from langchain_groq import ChatGroq
-news_llm= ChatGroq(
-    model="llama-3.3-70b-versatile",
-    temperature=0
-)
+from config import LLM_PROVIDER
+from agents.llm_provider import get_llm
+agent_llm = get_llm(LLM_PROVIDER)
+news_llm= agent_llm
+sentiment_llm=agent_llm
+risk_llm=agent_llm
 
-sentiment_llm=ChatGroq(
-    model="llama-3.3-70b-versatile",
-    temperature=0
-)
-
-risk_llm=ChatGroq(
-    model="llama-3.3-70b-versatile",
-    temperature=0
-)
-
+print(f"Specialized Agents using LLM Provider: {LLM_PROVIDER}")
 
 NEWS_AGENT_PROMPT = """
 You are a Market News Research Agent.
@@ -25,7 +17,6 @@ Responsibilities:
 - Mention macroeconomic impact
 """
 
-
 SENTIMENT_AGENT_PROMPT = """
 You are a Market Sentiment Analysis Agent.
 
@@ -36,7 +27,6 @@ Responsibilities:
 - Estimate confidence level
 """
 
-
 RISK_AGENT_PROMPT = """
 You are a Trading Risk Analysis Agent.
 
@@ -46,3 +36,4 @@ Responsibilities:
 - Analyze uncertainty
 - Highlight market dangers
 """
+

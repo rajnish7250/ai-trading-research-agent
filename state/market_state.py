@@ -11,13 +11,22 @@ class MarketState(TypedDict):
     
     # Structured Sentiment output
     sentiment: MarketSentiment
-    
     #News analysis output
     news_summary: str
-    
     #Risk analysis output
     risk_analysis: str
     
     #Retrieved RAG memory
     retrieved_context: str
+    
+    #Research Summary
+    research_summary: str
+    
+    #Final LLM answer
+    final_response: str
+    #Memory Status
+    memory_saved: bool
+    
+    #Memory Filtering
+    memory_approved: bool
     
