@@ -2,11 +2,11 @@
 External capabilities
 Example:search,APIs,database,trading APIs'''
 from dotenv import load_dotenv
-from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_tavily import TavilySearch
 from langchain.tools import tool
 
 load_dotenv()
-_tavily =TavilySearchResults(max_results=5)
+_tavily =TavilySearch(max_results=5)
 
 @tool
 def search_market_news(query: str) -> str:
@@ -24,9 +24,10 @@ def get_crypto_price(symbol: str) -> str:
     Example symbols:
     BTC-USD
     ETH-USD"""
-    
+    print(f"\nCRYTPO SYMBOL RECEIVED: {symbol}")
     ticker=yf.Ticker(symbol)
     data=ticker.history(period="1d")
+    print(data.tail())
     
     if data.empty:
         return "No price data found."
@@ -49,7 +50,7 @@ def get_stock_price(symbol: str) -> str:
     if data.empty:
         return f"No Price data found for {symbol}."
 
-    latest_price = data["close"].iloc[-1]
+    latest_price = data["Close"].iloc[-1]
 
     return f"latest price of {symbol} is {latest_price:.2f}"
 

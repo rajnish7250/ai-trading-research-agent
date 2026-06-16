@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+MEMORY_SIMILARITY_THRESHOLD = 0.20
 load_dotenv()
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "mock")
