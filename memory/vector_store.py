@@ -32,6 +32,10 @@ vector_db = Chroma(
 def get_embedding_model():
     return embedding_model
 def get_vector_db():
+    #This below two command is for deploying on streamlit
+    import os 
+    os.makedirs("chroma_db", exist_ok = True)
+    
     return vector_db
 
 from langchain_core.documents import Document 
