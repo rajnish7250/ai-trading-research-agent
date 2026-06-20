@@ -1,0 +1,8 @@
+services:
+  trading-api:
+    image: ai-trading-api
+    container_name: trading-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env

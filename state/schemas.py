@@ -4,3 +4,6 @@ class MarketSentiment(BaseModel):
     sentiment:str
     confidence:str
     summary:str
+    
+class ResearchRequest(BaseModel):
+    query: str
