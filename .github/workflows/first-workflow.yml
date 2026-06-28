@@ -3,7 +3,7 @@ name: AI Trading Agent CI
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
   build:
