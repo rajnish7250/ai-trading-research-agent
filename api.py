@@ -36,3 +36,11 @@ def research(request: ResearchRequest):
         return {
             "error": str(e)
         }
+        
+from datetime import datetime
+@app.get("/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat()
+    }
