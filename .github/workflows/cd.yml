@@ -28,3 +28,12 @@ jobs:
           tags: |
             rajnishk2439/ai-trading-agent-api:latest
             rajnishk2439/ai-trading-agent-api:${{ github.sha }}
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            docker pull rajnishk2439/ai-trading-agent-api:latest
