@@ -49,8 +49,18 @@ jobs:
               --env-file /home/ubuntu/ai-trading-research-agent/.env \
               rajnishk2439/ai-trading-api:latest
             
-            echo "Waiting for application..."
+            echo "Waiting for application to become healthy..."
 
-            sleep 15
-
-            curl --fail http://localhost:8000/health 
+            for i in {1..30}; do
+              if curl --fail http://localhost:8000/health; then
+                echo "Application is healthy."
+                exit 0
+              fi
+            
+              echo "Waiting... ($i/30)"
+              sleep 5
+            done
+            
+            echo "Health check failed after waiting."
+            docker logs trading-api
+            exit 1
