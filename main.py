@@ -1,4 +1,8 @@
 from fastapi import FastAPI
+import logging
+from utils import logging_config 
+logger = logging.getLogger(__name__)
+
 app=FastAPI()
 
 @app.get("/")
