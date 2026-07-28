@@ -37,14 +37,20 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             docker pull rajnishk2439/ai-trading-api:latest
-          
+
             docker stop trading-api || true
-          
+
             docker rm trading-api || true
-          
+
             docker run -d \
               --name trading-api \
               --restart unless-stopped \
               -p 8000:8000 \
               --env-file /home/ubuntu/ai-trading-research-agent/.env \
               rajnishk2439/ai-trading-api:latest
+            
+            echo "Waiting for application..."
+
+            sleep 15
+
+            curl --fail http://localhost:8000/health 

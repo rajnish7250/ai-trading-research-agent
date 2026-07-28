@@ -1,4 +1,4 @@
-name: AI Trading Agent CI
+name: Continous Integration
 
 on:
   push:
