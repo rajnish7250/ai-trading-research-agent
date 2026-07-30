@@ -1,10 +1,10 @@
-from fastapi import FastAPI
 import logging
+from fastapi import FastAPI
 from utils import logging_config 
 logger = logging.getLogger(__name__)
 
 app=FastAPI()
-
+logger.info("Starting AI Trading Research Agent")
 @app.get("/")
 
 def home():
@@ -22,11 +22,15 @@ from graphs.market_graph import graph
 
 @app.post("/research")
 def research(request: ResearchRequest):
+    
+    logger.info(f"Received research request: {request.query}")
     try:
         result = graph.invoke(
             {"messages": [HumanMessage(content= request.query)]},
             config={"configurable": {"thread_id": "user_1"}}
-        )   
+        )
+        
+        logger.info("Research completed successfully")   
 
         return { 
                 # "response": result.get("final_response","No   Response generated")
@@ -36,14 +40,17 @@ def research(request: ResearchRequest):
                 "risk": result.get("risk_analysis"),
                 "report": result.get("final_response")
                 }
-    except Exception as e:
+    except Exception:
+        logger.exception("Research request failed")
+        
         return {
-            "error": str(e)
+            "error":"Internal Server Error"
         }
         
 from datetime import datetime
 @app.get("/health")
 def health_check():
+    logger.info("Health check requested")
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat()

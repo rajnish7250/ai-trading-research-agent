@@ -1,4 +1,8 @@
 #retriever.py
+import logging
+from utils import logging_config
+
+logger = logging.getLogger(__name__)
 from memory.vector_store import get_vector_db
 vector_db=get_vector_db()
 retriever = vector_db.as_retriever(
@@ -10,21 +14,17 @@ retriever = vector_db.as_retriever(
     }
 )
 def retrieve_research(query):
-    
+    logger.info("Searching Historical Memories")
     results= retriever.invoke(query)
-    print("\nRetrieved Documents:\n")
-    for result in results:
-        print("Content: ")
-        print(result.page_content)
-        
-        print("METADATA: ")
-        print(result.metadata)
-        print("\n")
+    print("\nRetrieved Documents:\n")        
+    logger.info(f"Retrieved {len(results)} documents ")
         
 if __name__=="__main__":
     query= input("Enter Research Query: ")
     retrieve_research(query)
     # "What is current BTC outlook"
+
+        
 
         
         
