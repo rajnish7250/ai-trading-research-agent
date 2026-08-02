@@ -1,5 +1,9 @@
-#LLM Logic reasoning
+#market_agent.py
 import os
+import logging
+from utils import logging_config
+logger= logging.getLogger(__name__)
+
 from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage
 from state.schemas import MarketSentiment
@@ -7,7 +11,7 @@ from state.schemas import MarketSentiment
 from config import LLM_PROVIDER
 from agents.llm_provider import get_llm
 llm = get_llm(LLM_PROVIDER)
-print(f"Main Agent Using: {LLM_PROVIDER}")
+logger.info(f"Main Agent Using: {LLM_PROVIDER}")
 
 structured_llm=llm.with_structured_output(MarketSentiment)
     

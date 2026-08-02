@@ -1,6 +1,10 @@
 from config import LLM_PROVIDER
 from agents.llm_provider import get_llm
 # agent_llm = get_llm(LLM_PROVIDER)
+import logging
+from utils import logging_config
+logger=logging.getLogger(__name__)
+
 news_llm= get_llm("groq")
 sentiment_llm=get_llm("groq")
 risk_llm=get_llm("groq")
