@@ -4,7 +4,7 @@ load_dotenv()
 
 import logging
 from utils import logging_config
-logger=logging.get_logger(__name__)
+logger=logging.getLogger(__name__)
 
 from langchain_core.messages import AIMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
