@@ -1,5 +1,7 @@
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException
+from auth.api_key import verify_api_key
+
 from utils import logging_config 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,7 @@ from langchain_core.messages import HumanMessage
 from graphs.market_graph import graph
 
 @app.post("/research")
-def research(request: ResearchRequest):
+def research(request: ResearchRequest, _: str = Depends(verify_api_key)):
     
     logger.info(f"Received research request: {request.query}")
     try:
@@ -42,6 +44,8 @@ def research(request: ResearchRequest):
                 }
     except Exception:
         logger.exception("Research request failed")
+        
+        raise HTTPException(status_code=500, detail= "Internal Server Error")
         
         return {
             "error":"Internal Server Error"
