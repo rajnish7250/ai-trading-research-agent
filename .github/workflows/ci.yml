@@ -56,7 +56,7 @@ jobs:
         with:
           context: .
           file: Dockerfile.api
-          push: true
+          push: false
           tags: |
             rajnishk2439/ai-trading-api:latest
             rajnishk2439/ai-trading-api:${{ github.sha }}

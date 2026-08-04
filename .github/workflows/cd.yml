@@ -1,7 +1,8 @@
 name: Continuous Deployment
 
 on:
-  workflow_run:
+  workflow_dispatch: #workflow_dispatch allows you to manually trigger the workflow from the Github actions tab. 
+  #workflow_run: it runs when the workflow run is completed automatically.
     workflows:
       - Continuous Integration
     types:
