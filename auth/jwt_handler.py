@@ -29,3 +29,24 @@ def create_access_token(data: dict) -> str:
 
     return encoded_jwt
 
+def verify_access_token(token: str) -> dict:
+    """
+    Verify and decode a JWT access token.
+
+    Raises:
+        JWTError:
+            If the token is invalid, tampered with,
+            or expired.
+    """
+
+    try:
+        payload = jwt.decode(
+            token,
+            JWT_SECRET_KEY,
+            algorithms=[JWT_ALGORITHM],
+        )
+
+        return payload
+
+    except JWTError:
+        raise
