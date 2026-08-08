@@ -1,9 +1,14 @@
 import logging
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
 from auth.api_key import verify_api_key
 
 from utils import logging_config 
 logger = logging.getLogger(__name__)
+
+
+from auth.schemas import (LoginRequest, Token)
+from auth.service import authenticate_user 
+from auth.jwt_handler import create_access_token 
 
 app=FastAPI()
 logger.info("Starting AI Trading Research Agent")
@@ -13,6 +18,26 @@ def home():
     return {
         "message":"AI Trading Research Agent Running"
     }
+    
+    
+@app.post("/login", response_model=Token)
+def login(request: LoginRequest):
+    logger.info("Login attempt")
+    user = authenticate_user(request.email, request.password)
+    
+    if not user:
+        logger.warning("Login failed")
+        raise HTTPException(
+            status_code = status.HTTP_401_UNAUTHORIZED,
+            details = "Invalid email or password",
+        )
+        
+    logger.info("Login successful")
+    
+    access_token = create_access_token(
+        { "sub": user["email"],}
+    )
+    return Token(access_token = access_token, token_type="bearer")
     
 from state.schemas import ResearchRequest
 # @app.post("/research")
