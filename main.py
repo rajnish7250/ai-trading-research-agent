@@ -40,12 +40,9 @@ def login(request: LoginRequest):
     return Token(access_token = access_token, token_type="bearer")
     
 from state.schemas import ResearchRequest
-# @app.post("/research")
-# def research(request: ResearchRequest):
-#     return { "query": request.query}
-
 from langchain_core.messages import HumanMessage
 from graphs.market_graph import graph
+
 
 @app.post("/research")
 def research(request: ResearchRequest, _: str = Depends(verify_api_key)):
@@ -71,10 +68,6 @@ def research(request: ResearchRequest, _: str = Depends(verify_api_key)):
         logger.exception("Research request failed")
         
         raise HTTPException(status_code=500, detail= "Internal Server Error")
-        
-        return {
-            "error":"Internal Server Error"
-        }
         
 from datetime import datetime
 @app.get("/health")
