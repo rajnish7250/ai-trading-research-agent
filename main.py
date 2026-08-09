@@ -42,19 +42,18 @@ def login(request: LoginRequest):
 from state.schemas import ResearchRequest
 from langchain_core.messages import HumanMessage
 from graphs.market_graph import graph
+<<<<<<< Updated upstream
 
 
+=======
+from services.research_service import perform_research
+>>>>>>> Stashed changes
 @app.post("/research")
 def research(request: ResearchRequest, _: str = Depends(verify_api_key)):
     
     logger.info(f"Received research request: {request.query}")
     try:
-        result = graph.invoke(
-            {"messages": [HumanMessage(content= request.query)]},
-            config={"configurable": {"thread_id": "user_1"}}
-        )
-        
-        logger.info("Research completed successfully")   
+        result = perform_research(request.query)   
 
         return { 
                 # "response": result.get("final_response","No   Response generated")
