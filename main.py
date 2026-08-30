@@ -5,7 +5,6 @@ from auth.api_key import verify_api_key
 from utils import logging_config 
 logger = logging.getLogger(__name__)
 
-
 from auth.schemas import (LoginRequest, Token)
 from auth.service import authenticate_user 
 from auth.jwt_handler import create_access_token 
@@ -43,9 +42,9 @@ from state.schemas import ResearchRequest
 from langchain_core.messages import HumanMessage
 from graphs.market_graph import graph
 from services.research_service import perform_research
+
 @app.post("/research")
 def research(request: ResearchRequest, _: str = Depends(verify_api_key)):
-    
     logger.info(f"Received research request: {request.query}")
     try:
         result = perform_research(request.query)   
@@ -62,6 +61,11 @@ def research(request: ResearchRequest, _: str = Depends(verify_api_key)):
         logger.exception("Research request failed")
         
         raise HTTPException(status_code=500, detail= "Internal Server Error")
+    
+from fastapi import Depends
+from auth.dependencies import get_current_user 
+from services.research_service import perform_research 
+
         
 from datetime import datetime
 @app.get("/health")
