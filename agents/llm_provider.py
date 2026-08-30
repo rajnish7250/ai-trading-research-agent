@@ -42,7 +42,7 @@ def get_llm(provider="gemini"):
     elif provider=="groq":
         logger.info("Initializing Groq LLM")
         return ChatGroq(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             # model="llama-3.1-8b-instant",
             temperature=0,
             streaming= False 
