@@ -70,9 +70,8 @@ graph_builder.add_edge("sentiment", "summary")
 graph_builder.add_edge("risk_agent", "summary")
 
 graph_builder.add_edge("summary", "memory_filter")
-# graph_builder.add_edge("memory_filter", "memory_compression")
-# graph_builder.add_edge("memory_compression","memory_writer" )
-graph_builder.add_edge("memory_filter","memory_writer")
+graph_builder.add_edge("memory_filter", "memory_compression")
+graph_builder.add_edge("memory_compression","memory_writer" )
 graph_builder.add_edge("memory_writer", END)
 # ---------------------------------------------------
 # MEMORY

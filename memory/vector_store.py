@@ -12,6 +12,7 @@
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from dotenv import load_dotenv
+import os
 load_dotenv()
 # =====================================================
 # LOAD ONCE AT APPLICATION STARTUP
@@ -21,10 +22,14 @@ embedding_model = HuggingFaceEmbeddings(
     model_name="BAAI/bge-small-en-v1.5"
 )
 print("Initializing ChromaDB...")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CHROMA_PATH = os.path.join(BASE_DIR, "chroma_db")
+
 vector_db = Chroma(
     collection_name="market_research",
     embedding_function=embedding_model,
-    persist_directory="./chroma_db"
+    persist_directory=CHROMA_PATH,
+    collection_metadata={"hnsw:space": "cosine"},
 )
 # =====================================================
 # GETTERS
@@ -34,7 +39,7 @@ def get_embedding_model():
 def get_vector_db():
     #This below two command is for deploying on streamlit
     import os 
-    os.makedirs("chroma_db", exist_ok = True)
+    os.makedirs(CHROMA_PATH, exist_ok = True)
     
     return vector_db
 
@@ -44,7 +49,8 @@ if __name__ == "__main__":
     vector_db = Chroma(
         collection_name="market_research",
         embedding_function=embedding_model,
-        persist_directory="./chroma_db"
+        persist_directory="./chroma_db",
+        collection_metadata={"hnsw:space": "cosine"},
     )
     vector_db.add_documents([
         Document(

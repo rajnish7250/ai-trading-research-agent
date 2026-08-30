@@ -1,8 +1,9 @@
 from state.market_state import MarketState
-from agents.llm_provider import get_llm
-from config import LLM_PROVIDER
-llm = get_llm(LLM_PROVIDER)
+from agents.specialized_agents import news_llm as compression_llm
+
 def memory_compression_node(state: MarketState):
+    if not state.get("memory_approved", False):
+        return {"memory_summary": ""}
     research_summary = state.get("research_summary","")
     prompt = f"""
     Extract ONLY durable market knowledge.
@@ -30,7 +31,7 @@ def memory_compression_node(state: MarketState):
     {research_summary}
     """
 
-    response = llm.invoke(prompt)
+    response = compression_llm.invoke(prompt)
 
     print("\nMEMORY SUMMARY:\n")
     print(response.content)

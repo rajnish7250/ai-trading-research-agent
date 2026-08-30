@@ -2,9 +2,11 @@
 from langchain_core.documents import Document
 from state.market_state import MarketState
 from memory.vector_store import get_vector_db
+from memory.text_splitter import split_summary
+from utils.asset_mapper import detect_symbol
 
 def memory_writer_node(state:MarketState):
-    response= state.get("research_summary","")
+    response= state.get("memory_summary","")
     approved =state.get("memory_approved",False)
     print("\nMEMORY WRITER RECEIVED:\n")
     print(response)    
@@ -13,16 +15,17 @@ def memory_writer_node(state:MarketState):
     if not approved:
         print("\nMemory not approved, skipping save.\n")
         return {"memory_saved": False}
-    doc=Document(
-    page_content = response,
+    
     metadata = {
         "source": "agent_generated",
         "type": "research_memory",
-        "query": state["messages"][-1].content
+        "query": state["messages"][-1].content,
+        "asset": detect_symbol(state["messages"][-1].content) or "unknown",
     }
-    )
-    print("\nSaving research memory...\n")
+    chunks = split_summary(response, metadata)
+    print(f"\nSaving research memory as {len(chunks)} chunk(s)...\n")
     vector_db = get_vector_db()
-    vector_db.add_documents([doc])
+    vector_db.add_documents(chunks) 
+     
     print("\nResearch memory saved successfully\n")
     return {"memory_saved": True}

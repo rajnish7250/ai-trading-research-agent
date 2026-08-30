@@ -26,11 +26,8 @@ ASSET_MAP = {
 
 
 def detect_symbol(query: str):
-
     query = query.lower()
-
     for keyword, symbol in ASSET_MAP.items():
         if keyword in query:
             return symbol
-
     return None

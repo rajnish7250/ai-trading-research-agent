@@ -24,6 +24,8 @@ class MarketState(TypedDict):
 
     #Research Summary
     research_summary: str 
+    #Compressed, durable-only memory
+    memory_summary: str 
     
     
     #Final response
