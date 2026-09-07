@@ -1,3 +1,8 @@
+from fastapi import Request
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 import logging
 from fastapi import FastAPI, Depends, HTTPException, status
 from auth.api_key import verify_api_key
@@ -10,6 +15,9 @@ from auth.service import authenticate_user
 from auth.jwt_handler import create_access_token 
 
 app=FastAPI()
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 logger.info("Starting AI Trading Research Agent")
 @app.get("/")
 
@@ -20,17 +28,19 @@ def home():
     
     
 @app.post("/login", response_model=Token)
-def login(request: LoginRequest):
+@limiter.limit("5/minute")
+def login(request: Request, body: LoginRequest):
     logger.info("Login attempt")
-    user = authenticate_user(request.email, request.password)
+    user = authenticate_user(body.email, body.password)
     
     if not user:
         logger.warning("Login failed")
         raise HTTPException(
             status_code = status.HTTP_401_UNAUTHORIZED,
-            details = "Invalid email or password",
+            detail = "Invalid email or password",
         )
         
+                
     logger.info("Login successful")
     
     access_token = create_access_token(
@@ -44,11 +54,11 @@ from graphs.market_graph import graph
 from services.research_service import perform_research
 
 @app.post("/research")
-def research(request: ResearchRequest, _: str = Depends(verify_api_key)):
-    logger.info(f"Received research request: {request.query}")
+@limiter.limit("1/minute")
+def research(request: Request, body: ResearchRequest, _: str = Depends(verify_api_key)):
+    logger.info(f"Received research request: {body.query}")
     try:
-        result = perform_research(request.query)   
-
+        result = perform_research(body.query)
         return { 
                 # "response": result.get("final_response","No   Response generated")
                 "price": result.get("market_price_data"),
