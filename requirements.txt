@@ -1,3 +1,8 @@
+# PyTorch / Transformers
+torch==2.14.0
+torchvision==0.29.0
+transformers==5.16.1
+
 # Core AI Framework
 langchain==1.3.2
 langgraph==1.2.2
@@ -10,9 +15,9 @@ langchain-tavily==0.2.18
 chromadb==1.5.9
 langchain-chroma==1.1.0
 
-
-#Chunking
+# Chunking
 langchain-text-splitters==1.1.2
+
 # Embeddings
 langchain-huggingface==1.2.2
 sentence-transformers==5.5.1
@@ -30,6 +35,7 @@ fastapi==0.116.1
 uvicorn==0.48.0
 slowapi==0.1.9
 
+# Finance / Market Data
 yfinance==1.4.1
 
 # Authentication & Security
