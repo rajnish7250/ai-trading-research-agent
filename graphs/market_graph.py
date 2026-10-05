@@ -1,6 +1,5 @@
 #Workflows orchestration
-#Langgraph lives here
-#Market_graph should only know which node exist and how nodes are connected. 
+
 from langgraph.graph import (StateGraph,START,END)
 
 from langgraph.prebuilt import (ToolNode, tools_condition)

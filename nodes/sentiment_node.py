@@ -1,5 +1,9 @@
 from state.market_state import MarketState
+from state.schemas import MarketSentiment
 from agents.specialized_agents import(sentiment_llm, SENTIMENT_AGENT_PROMPT)
+structured_sentiment_llm = sentiment_llm.with_structured_output(
+    MarketSentiment
+)
 def sentiment_node(state:MarketState):
     user_question = state["messages"][-1].content
     retrieved_context = state.get(
@@ -21,18 +25,19 @@ def sentiment_node(state:MarketState):
     Latest Market News: {market_news}
     Current Market Data: {market_price_data}
     
-    Analyze the sentiment.
+    Analyze the market sentiment using only the information provided.
     
     Return:
-    -Sentiment
+    -Overall Sentiment
     -Confidence
-    -Reasoning
+    -Top Factors Driving that Sentiment
     """
     
-    response= sentiment_llm.invoke(prompt)
-    print("\nSENTIMENT OUTPUT: \n")
-    print(response.content)
+    response = structured_sentiment_llm.invoke(prompt)
     
-    return{
-        "sentiment": response.content
+    print("\nSENTIMENT OUTPUT:\n")
+    print(response)
+    
+    return {
+        "sentiment": response
     }

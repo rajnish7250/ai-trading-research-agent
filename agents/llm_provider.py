@@ -16,8 +16,12 @@ class MockStructureLLM:
     def invoke(self, messages):
         return MarketSentiment(
             sentiment="Bullish",
-            confidence=0.85,
-            reasoning="Mock sentiment"
+            confidence="High",
+            drivers=[
+                "Positive market developments",
+                "Strong institutional activity",
+                "Favorable market conditions"
+            ]
         )
         
 class MockLLM:

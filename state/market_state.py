@@ -2,7 +2,11 @@
 
 from typing_extensions import TypedDict, Annotated
 from langgraph.graph.message import add_messages
-from state.schemas import MarketSentiment
+from state.schemas import (
+    MarketSentiment,
+    MarketRisk,
+    MarketNews
+)
 
 class MarketState(TypedDict):
     # Conversation messages
@@ -14,11 +18,11 @@ class MarketState(TypedDict):
     market_price_data: str
     
     #News analysis output
-    news_summary: str
+    news_summary: MarketNews | None
     # sentiment:
-    sentiment: str
+    sentiment: MarketSentiment | None
     #Risk analysis output
-    risk_analysis: str
+    risk_analysis: MarketRisk | None
     #Retrieved RAG memory
     retrieved_context: str
 
