@@ -11,17 +11,45 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_cerebras import ChatCerebras
 
-from state.schemas import MarketSentiment
+from state.schemas import (
+    MarketSentiment,
+    MarketRisk
+)
+
 class MockStructureLLM:
+
+    def __init__(self, schema):
+        self.schema = schema
+
+    def with_structured_output(self, schema):
+        return MockStructureLLM(schema)
+
     def invoke(self, messages):
-        return MarketSentiment(
-            sentiment="Bullish",
-            confidence="High",
-            drivers=[
-                "Positive market developments",
-                "Strong institutional activity",
-                "Favorable market conditions"
-            ]
+
+        if self.schema == MarketSentiment:
+            return MarketSentiment(
+                sentiment="Bullish",
+                confidence="High",
+                drivers=[
+                    "Positive market developments",
+                    "Strong institutional activity",
+                    "Favorable market conditions"
+                ]
+            )
+
+        if self.schema == MarketRisk:
+            return MarketRisk(
+                risk_level="Medium",
+                key_risks=[
+                    "High market volatility",
+                    "Regulatory uncertainty",
+                    "Potential sentiment reversal"
+                ],
+                watch_signal="Monitor price volatility and market news"
+            )
+
+        raise ValueError(
+            f"Unsupported structured output schema: {self.schema}"
         )
         
 class MockLLM:
@@ -33,7 +61,7 @@ class MockLLM:
         return self
     
     def with_structured_output(self, schema):
-        return MockStructureLLM()
+        return MockStructureLLM(schema)
 
 #Other LLM providers can be added here with same interface: OpenRouter, 
 def get_llm(provider="gemini"):

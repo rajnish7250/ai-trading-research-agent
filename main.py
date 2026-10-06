@@ -55,7 +55,8 @@ from services.research_service import perform_research
 
 @app.post("/research")
 @limiter.limit("5/minute")
-def research(request: Request, body: ResearchRequest, _: str = Depends(verify_api_key)):
+def research(request: Request, body: ResearchRequest, 
+             _: str = Depends(verify_api_key)):
     logger.info(f"Received research request: {body.query}")
     try:
         result = perform_research(body.query)

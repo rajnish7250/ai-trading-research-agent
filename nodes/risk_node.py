@@ -1,7 +1,11 @@
 #Creating risk node
 from state.market_state import MarketState
+from state.schemas import MarketRisk
 from agents.specialized_agents import (risk_llm, RISK_AGENT_PROMPT)
 
+structured_risk_llm = risk_llm.with_structured_output(
+    MarketRisk
+)
 def risk_agent_node(state:MarketState):
     user_question = state["messages"][-1].content
     retrieved_context = state.get(
@@ -23,18 +27,18 @@ def risk_agent_node(state:MarketState):
     Latest Market News: {market_news}
     Current Market Data: {market_price_data}
     
-    Analyze the trading Risks only.
+    Analyze the market Risks using only the information provided. 
     
     Return:
-    -Sentiment
-    -Confidence
-    -Reasoning
+    -Overall Risk Assessment
+    -Major Risks and Uncertainties
+    -One important signal to monitor
     """
     
-    response= risk_llm.invoke(prompt)
+    response= structured_risk_llm.invoke(prompt)
     print("\nRISK AGENT OUTPUT\n")
-    print(response.content)
+    print(response)
     return{
-        "risk_analysis": response.content
+        "risk_analysis": response
     }
 
