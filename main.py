@@ -5,7 +5,9 @@ from slowapi.errors import RateLimitExceeded
 
 import logging
 from fastapi import FastAPI, Depends, HTTPException, status
+
 from auth.api_key import verify_api_key
+from config import AUTH_ENABLED
 
 from utils import logging_config 
 logger = logging.getLogger(__name__)
@@ -27,7 +29,7 @@ def home():
     }
     
     
-@app.post("/login", response_model=Token)
+@app.post("/login", response_model=Token, include_in_schema= AUTH_ENABLED)
 @limiter.limit("5/minute")
 def login(request: Request, body: LoginRequest):
     logger.info("Login attempt")

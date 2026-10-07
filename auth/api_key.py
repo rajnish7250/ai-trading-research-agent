@@ -3,6 +3,8 @@ from fastapi.security import APIKeyHeader
 
 from config import CURRENT_API_KEY, PREVIOUS_API_KEY
 import logging
+
+from config import AUTH_ENABLED
 from utils import logging_config
 
 logger = logging.getLogger(__name__)
@@ -22,6 +24,17 @@ if PREVIOUS_API_KEY:
 def verify_api_key(
     api_key: str = Security(api_key_header),
 ):
+    if not AUTH_ENABLED:
+        return "development-mode"
+
+    if api_key not in VALID_API_KEYS:
+        logger.warning("Unauthorized API Request")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API Key",
+        )
+
+    return api_key
     """
     Verify incoming API Key.
 

@@ -7,7 +7,8 @@ load_dotenv()
 # AI Configuration
 # =========================
 
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "mock")
+# LLM_PROVIDER = os.getenv("LLM_PROVIDER", "mock")
+LLM_PROVIDER = "mock"
 
 VALID_PROVIDERS = [
     "gemini",
@@ -24,6 +25,17 @@ if LLM_PROVIDER not in VALID_PROVIDERS:
 # =========================
 
 MEMORY_SIMILARITY_THRESHOLD = 0.20
+
+
+# =========================
+# Authentication
+# =========================
+
+AUTH_ENABLED = os.getenv(
+    "AUTH_ENABLED",
+    "true"
+).lower() == "true"
+
 
 # =========================
 # API Key Authentication
