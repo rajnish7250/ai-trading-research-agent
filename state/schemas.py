@@ -25,6 +25,15 @@ class MarketNews(BaseModel):
     etf_updates: list[str]
     regulatory_updates: list[str]
     market_data_summary: str
+    
+
+class ResearchReport(BaseModel):
+    executive_summary: str
+    market_outlook: str
+    key_developments: list[str]
+    sentiment_summary: str
+    risk_summary: str
+    watch_items: list[str]
 
 
 class ResearchRequest(BaseModel):

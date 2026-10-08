@@ -7,6 +7,8 @@ logger=logging.getLogger(__name__)
 news_llm = get_llm(LLM_PROVIDER)
 sentiment_llm = get_llm(LLM_PROVIDER)
 risk_llm = get_llm(LLM_PROVIDER)
+summary_llm = get_llm(LLM_PROVIDER)
+
 
 print(f"Specialized Agents using LLM Provider: {LLM_PROVIDER}")
 
@@ -80,3 +82,17 @@ Watch:
 - ...
 """
 
+SUMMARY_AGENT_PROMPT = """
+You are a Senior Market Research Analyst.
+
+Synthesize the structured outputs from the News, Sentiment, and Risk
+agents into one balanced market research report.
+
+Rules:
+- Use only the provided information.
+- Do not invent facts.
+- Clearly distinguish current facts from interpretation.
+- Do not provide personalized financial advice.
+- Do not make guaranteed price predictions.
+- Keep the report concise and professional.
+"""

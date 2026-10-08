@@ -1,10 +1,18 @@
 from state.market_state import MarketState
 from agents.specialized_agents import news_llm as compression_llm
 
+
 def memory_compression_node(state: MarketState):
+
     if not state.get("memory_approved", False):
         return {"memory_summary": ""}
-    research_summary = state.get("research_summary","")
+
+    memory_text = state.get("memory_text", "")
+
+    if not memory_text:
+        print("Memory compression skipped: No memory text")
+        return {"memory_summary": ""}
+
     prompt = f"""
     Extract ONLY durable market knowledge.
 
@@ -25,10 +33,10 @@ def memory_compression_node(state: MarketState):
     - price predictions
 
     Output concise bullet points.
-    
+
     Report:
 
-    {research_summary}
+    {memory_text}
     """
 
     response = compression_llm.invoke(prompt)

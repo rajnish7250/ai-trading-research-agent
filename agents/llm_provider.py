@@ -14,7 +14,8 @@ from langchain_cerebras import ChatCerebras
 from state.schemas import (
     MarketSentiment,
     MarketRisk,
-    MarketNews
+    MarketNews,
+    ResearchReport
 )
 
 class MockStructureLLM:
@@ -65,19 +66,58 @@ class MockStructureLLM:
                 ],
                 watch_signal="Monitor price volatility and market news"
             )
+            
+        if self.schema == ResearchReport:
+            return ResearchReport(
+                executive_summary=(
+                    "Bitcoin is showing elevated volatility while "
+                    "institutional participation remains significant."
+                ),
+                market_outlook=(
+                    "The current outlook is mixed, with positive "
+                    "institutional activity balanced against elevated risk."
+                ),
+                key_developments=[
+                    "Bitcoin continues to trade with elevated volatility",
+                    "Institutional participation remains significant"
+                ],
+                sentiment_summary=(
+                    "Market sentiment is Bullish with High confidence, "
+                    "supported by positive market developments and "
+                    "institutional activity."
+                ),
+                risk_summary=(
+                    "Risk is Medium due to high volatility, regulatory "
+                    "uncertainty, and potential sentiment reversal."
+                ),
+                watch_items=[
+                    "Bitcoin price volatility",
+                    "ETF activity",
+                    "Regulatory developments",
+                    "Institutional activity"
+                ]
+            )
 
         raise ValueError(
             f"Unsupported structured output schema: {self.schema}"
         )
         
 class MockLLM:
+
     def invoke(self, messages):
+
         return AIMessage(
-            content= "Mock Response"
+            content=(
+                "- Institutional participation remains significant.\n"
+                "- Bitcoin ETF activity remains an important market driver.\n"
+                "- Regulatory developments continue to influence the market.\n"
+                "- Elevated market volatility remains a notable market condition."
             )
-    def bind_tools(self, tools, tool_choice= "auto"):
+        )
+
+    def bind_tools(self, tools, tool_choice="auto"):
         return self
-    
+
     def with_structured_output(self, schema):
         return MockStructureLLM(schema)
 
