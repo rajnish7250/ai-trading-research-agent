@@ -13,7 +13,8 @@ from langchain_cerebras import ChatCerebras
 
 from state.schemas import (
     MarketSentiment,
-    MarketRisk
+    MarketRisk,
+    MarketNews
 )
 
 class MockStructureLLM:
@@ -25,6 +26,23 @@ class MockStructureLLM:
         return MockStructureLLM(schema)
 
     def invoke(self, messages):
+        if self.schema == MarketNews:
+            return MarketNews(
+                key_developments=[
+                    "Bitcoin continues to trade with elevated volatility",
+                    "Institutional participation remains significant"
+                ],
+                etf_updates=[
+                    "Bitcoin ETF activity remains an important market driver"
+                ],
+                regulatory_updates=[
+                    "Regulatory developments continue to influence market sentiment"
+                ],
+                market_data_summary=(
+                    "Bitcoin is trading around the latest observed market price "
+                    "with elevated trading activity."
+                )
+            )        
 
         if self.schema == MarketSentiment:
             return MarketSentiment(
