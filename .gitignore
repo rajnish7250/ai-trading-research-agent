@@ -25,3 +25,8 @@ archive/
 
 #logs
 logs/
+
+# SQLite research history
+*.db
+*.sqlite
+*.sqlite3

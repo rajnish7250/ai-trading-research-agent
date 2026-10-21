@@ -4,7 +4,14 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 import logging
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import (
+    Request,
+    FastAPI,
+    Depends,
+    HTTPException,
+    Query,
+    status,
+)
 
 from config import AUTH_ENABLED
 
@@ -54,6 +61,10 @@ from state.schemas import ResearchRequest
 from langchain_core.messages import HumanMessage
 from graphs.market_graph import graph
 from services.research_service import perform_research
+from services.research_history_store import (
+    save_research,
+    get_research_history,
+)
 
 @app.post("/research")
 @limiter.limit("5/minute")
@@ -70,7 +81,7 @@ def research(
             user_id=current_user["email"],
         )
 
-        return {
+        response_data = {
             "price": result.get("market_price_data"),
             "news": result.get("news_summary"),
             "sentiment": result.get("sentiment"),
@@ -78,19 +89,35 @@ def research(
             "report": result.get("final_response"),
         }
 
+        save_research(
+            user_id=current_user["email"],
+            query=body.query,
+            result=response_data,
+        )
+
+        return response_data
+
     except Exception:
         logger.exception("Research request failed")
         raise HTTPException(
             status_code=500,
             detail="Internal Server Error",
         )
-    
+@app.get("/research/history")
+def research_history(
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user: dict = Depends(get_current_user),
+):
+    return get_research_history(
+        user_id=current_user["email"],
+        limit=limit,
+    )
+
 from fastapi import Depends
 from auth.dependencies import get_current_user 
-from services.research_service import perform_research 
-
-        
+from services.research_service import perform_research      
 from datetime import datetime
+
 @app.get("/health")
 def health_check():
     logger.info("Health check requested")
