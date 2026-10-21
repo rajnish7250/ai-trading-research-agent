@@ -6,7 +6,6 @@ from slowapi.errors import RateLimitExceeded
 import logging
 from fastapi import FastAPI, Depends, HTTPException, status
 
-from auth.api_key import verify_api_key
 from config import AUTH_ENABLED
 
 from utils import logging_config 
@@ -15,6 +14,7 @@ logger = logging.getLogger(__name__)
 from auth.schemas import (LoginRequest, Token)
 from auth.service import authenticate_user 
 from auth.jwt_handler import create_access_token 
+from auth.dependencies import get_current_user
 
 app=FastAPI()
 limiter = Limiter(key_func=get_remote_address)
@@ -57,23 +57,33 @@ from services.research_service import perform_research
 
 @app.post("/research")
 @limiter.limit("5/minute")
-def research(request: Request, body: ResearchRequest, 
-             _: str = Depends(verify_api_key)):
-    logger.info(f"Received research request: {body.query}")
+def research(
+    request: Request,
+    body: ResearchRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    logger.info("Received research request")
+
     try:
-        result = perform_research(body.query)
-        return { 
-                # "response": result.get("final_response","No   Response generated")
-                "price": result.get("market_price_data"),
-                "news": result.get("news_summary"),
-                "sentiment": result.get("sentiment"),
-                "risk": result.get("risk_analysis"),
-                "report": result.get("final_response")
-                }
+        result = perform_research(
+            query=body.query,
+            user_id=current_user["email"],
+        )
+
+        return {
+            "price": result.get("market_price_data"),
+            "news": result.get("news_summary"),
+            "sentiment": result.get("sentiment"),
+            "risk": result.get("risk_analysis"),
+            "report": result.get("final_response"),
+        }
+
     except Exception:
         logger.exception("Research request failed")
-        
-        raise HTTPException(status_code=500, detail= "Internal Server Error")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal Server Error",
+        )
     
 from fastapi import Depends
 from auth.dependencies import get_current_user 

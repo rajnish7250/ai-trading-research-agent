@@ -7,8 +7,7 @@ load_dotenv()
 # AI Configuration
 # =========================
 
-# LLM_PROVIDER = os.getenv("LLM_PROVIDER", "mock")
-LLM_PROVIDER = "mock"
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "mock").lower()
 
 VALID_PROVIDERS = [
     "gemini",

@@ -1,10 +1,14 @@
 import logging
+
 from langchain_core.messages import HumanMessage
 from graphs.market_graph import graph
+
 logger = logging.getLogger(__name__)
 
-def perform_research(query: str):
+
+def perform_research(query: str, user_id: str):
     logger.info("Starting market research")
+
     result = graph.invoke(
         {
             "messages": [
@@ -13,11 +17,10 @@ def perform_research(query: str):
         },
         config={
             "configurable": {
-                "thread_id": "user_1"
+                "thread_id": f"user_{user_id}"
             }
         },
     )
 
     logger.info("Market research completed")
-
     return result
