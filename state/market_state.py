@@ -10,6 +10,9 @@ from state.schemas import (
 )
 
 class MarketState(TypedDict):
+    
+    # Authenticated user identity
+    user_id: str
     # Conversation messages
     messages: Annotated[list, add_messages]
     # Structured Sentiment output

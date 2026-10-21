@@ -4,6 +4,14 @@ from config import MEMORY_SIMILARITY_THRESHOLD
 
 
 def memory_filter_node(state: MarketState):
+    
+    user_id = state.get("user_id")
+
+    if not user_id:
+        return {
+            "memory_approved": False,
+            "memory_text": "",
+        }
 
     report = state.get("research_summary")
 
@@ -64,7 +72,8 @@ Watch Items:
 
     results = vector_db.similarity_search_with_score(
         summary,
-        k=1
+        k=1,
+        filter={"user_id": user_id},
     )
 
     if results:

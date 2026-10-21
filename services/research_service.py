@@ -13,7 +13,8 @@ def perform_research(query: str, user_id: str):
         {
             "messages": [
                 HumanMessage(content=query)
-            ]
+            ],
+            "user_id": user_id,
         },
         config={
             "configurable": {

@@ -8,6 +8,10 @@ from utils.asset_mapper import detect_symbol
 def memory_writer_node(state:MarketState):
     response= state.get("memory_summary","")
     approved =state.get("memory_approved",False)
+    user_id = state.get("user_id")
+    if not user_id:
+        return {"memory_saved": False}
+    
     print("\nMEMORY WRITER RECEIVED:\n")
     print(response)    
     if not response:
@@ -19,6 +23,7 @@ def memory_writer_node(state:MarketState):
     metadata = {
         "source": "agent_generated",
         "type": "research_memory",
+        "user_id": user_id,
         "query": state["messages"][-1].content,
         "asset": detect_symbol(state["messages"][-1].content) or "unknown",
     }

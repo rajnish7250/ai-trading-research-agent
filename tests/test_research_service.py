@@ -31,3 +31,26 @@ def test_research_uses_separate_threads_for_users(monkeypatch):
     ]
 
     assert captured_thread_ids[0] != captured_thread_ids[1]
+    
+
+def test_research_passes_user_id_into_graph_state(monkeypatch):
+
+    captured = {}
+
+    def mock_invoke(state, config):
+        captured["state"] = state
+        captured["config"] = config
+        return {"final_response": "Mock report"}
+
+    monkeypatch.setattr(research_service.graph, "invoke", mock_invoke)
+
+    research_service.perform_research(
+        query="Analyze BTC-USD",
+        user_id="alice@example.com",
+    )
+
+    assert captured["state"]["user_id"] == "alice@example.com"
+    assert (
+        captured["config"]["configurable"]["thread_id"]
+        == "user_alice@example.com"
+    )

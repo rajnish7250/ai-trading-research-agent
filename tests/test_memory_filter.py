@@ -36,9 +36,15 @@ def test_memory_filter_approves_new_research(monkeypatch):
     )
 
     result = memory_filter_module.memory_filter_node(
-        {"research_summary": report}
+        {"research_summary": report,"user_id": "alice@example.com",}
     )
 
     assert result["memory_approved"] is True
     assert "Bitcoin ETF inflows" in result["memory_text"]
-    mock_vector_db.similarity_search_with_score.assert_called_once()
+    mock_vector_db.similarity_search_with_score.assert_called_once_with(
+        result["memory_text"],
+        k=1,
+        filter={"user_id": "alice@example.com"},
+    )
+
+
