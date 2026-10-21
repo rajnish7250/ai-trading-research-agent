@@ -2,8 +2,10 @@
 from agents.specialized_agents import news_llm, NEWS_AGENT_PROMPT
 from state.market_state import MarketState
 from state.schemas import MarketNews
-structured_news_llm = news_llm.with_structured_output(
-    MarketNews
+from agents.llm_provider import get_structured_output_llm
+
+structured_news_llm = get_structured_output_llm(news_llm,
+    MarketNews,
 )
 
 def news_agent_node(state:MarketState):

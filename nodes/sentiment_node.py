@@ -1,9 +1,13 @@
 from state.market_state import MarketState
 from state.schemas import MarketSentiment
 from agents.specialized_agents import(sentiment_llm, SENTIMENT_AGENT_PROMPT)
-structured_sentiment_llm = sentiment_llm.with_structured_output(
+from agents.llm_provider import get_structured_output_llm
+
+structured_sentiment_llm = get_structured_output_llm(
+    sentiment_llm,
     MarketSentiment
 )
+
 def sentiment_node(state:MarketState):
     user_question = state["messages"][-1].content
     retrieved_context = state.get(

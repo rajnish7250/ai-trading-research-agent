@@ -1,9 +1,11 @@
 from state.market_state import MarketState
 from state.schemas import ResearchReport
 from agents.specialized_agents import summary_llm
+from agents.llm_provider import get_structured_output_llm
 
 
-structured_summary_llm = summary_llm.with_structured_output(
+structured_summary_llm = get_structured_output_llm(
+    summary_llm,
     ResearchReport
 )
 

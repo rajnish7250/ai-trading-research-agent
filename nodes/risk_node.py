@@ -2,10 +2,13 @@
 from state.market_state import MarketState
 from state.schemas import MarketRisk
 from agents.specialized_agents import (risk_llm, RISK_AGENT_PROMPT)
+from agents.llm_provider import get_structured_output_llm
 
-structured_risk_llm = risk_llm.with_structured_output(
-    MarketRisk
+structured_risk_llm = get_structured_output_llm(
+    risk_llm,
+    MarketRisk,
 )
+
 def risk_agent_node(state:MarketState):
     user_question = state["messages"][-1].content
     retrieved_context = state.get(

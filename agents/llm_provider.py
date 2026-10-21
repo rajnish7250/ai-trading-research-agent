@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_cerebras import ChatCerebras
+from config import LLM_PROVIDER
 
 from state.schemas import (
     MarketSentiment,
@@ -153,4 +154,14 @@ def get_llm(provider="gemini"):
     else:
         logger.error(f"Unsupported LLM Provider: {provider}")
         raise ValueError(f"Provider {provider} not Supported")
+    
+def get_structured_output_llm(llm, schema):
+    """Use native JSON Schema for Groq; preserve other providers."""
+    if LLM_PROVIDER == "groq":
+        return llm.with_structured_output(
+            schema,
+            method="json_schema",
+        )
+
+    return llm.with_structured_output(schema)
 
