@@ -1,3 +1,4 @@
+
 name: Continuous Integration
 
 on:
@@ -5,15 +6,17 @@ on:
     branches:
       - master
 
+permissions:
+  contents: read
+
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     env:
       CURRENT_API_KEY: ${{ secrets.CURRENT_API_KEY }}
       PREVIOUS_API_KEY: ${{ secrets.PREVIOUS_API_KEY }}
-      JWT_SECRET_KEY: ${{secrets.JWT_SECRET_KEY}}
+      JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -22,7 +25,6 @@ jobs:
       LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
 
     steps:
-
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -31,20 +33,17 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Verify Python Version
-        run: python --version
-
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
 
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
+      - name: Run Automated Tests
+        run: pytest -q
+
       - name: Verify FastAPI Application
         run: python -c "from main import app; print('FastAPI application imported successfully')"
-
-      - name: Verify Installed Packages
-        run: pip list
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -52,12 +51,12 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Build and Push Docker Image
+      - name: Build and Push API Docker Image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.api
-          push: false
+          push: true
           tags: |
             rajnishk2439/ai-trading-api:latest
             rajnishk2439/ai-trading-api:${{ github.sha }}
