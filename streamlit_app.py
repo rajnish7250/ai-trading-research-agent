@@ -49,7 +49,7 @@ def login(email, password):
     """Authenticate against FastAPI and store the returned JWT."""
     response = requests.post(
         f"{API_BASE_URL}/login",
-        json={"email": email, "password": password},
+        data={"username": email, "password": password},
         timeout=15,
     )
 

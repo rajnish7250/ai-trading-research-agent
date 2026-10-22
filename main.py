@@ -18,7 +18,8 @@ from config import AUTH_ENABLED
 from utils import logging_config 
 logger = logging.getLogger(__name__)
 
-from auth.schemas import (LoginRequest, Token)
+from auth.schemas import Token
+from fastapi.security import OAuth2PasswordRequestForm
 from auth.service import authenticate_user 
 from auth.jwt_handler import create_access_token 
 from auth.dependencies import get_current_user
@@ -36,26 +37,39 @@ def home():
     }
     
     
-@app.post("/login", response_model=Token, include_in_schema= AUTH_ENABLED)
+
+@app.post("/login", response_model=Token, include_in_schema=AUTH_ENABLED)
 @limiter.limit("5/minute")
-def login(request: Request, body: LoginRequest):
+def login(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+):
     logger.info("Login attempt")
-    user = authenticate_user(body.email, body.password)
-    
+
+    # The user enters their email in Swagger's username field.
+    user = authenticate_user(
+        form_data.username,
+        form_data.password,
+    )
+
     if not user:
         logger.warning("Login failed")
         raise HTTPException(
-            status_code = status.HTTP_401_UNAUTHORIZED,
-            detail = "Invalid email or password",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
         )
-        
-                
+
     logger.info("Login successful")
-    
+
     access_token = create_access_token(
-        { "sub": user["email"],}
+        {"sub": user["email"]}
     )
-    return Token(access_token = access_token, token_type="bearer")
+
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+    )
+
     
 from state.schemas import ResearchRequest
 from langchain_core.messages import HumanMessage
