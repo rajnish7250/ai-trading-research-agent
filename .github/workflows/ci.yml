@@ -37,10 +37,13 @@ jobs:
         run: python -m pip install --upgrade pip
 
       - name: Install Dependencies
-        run: pip install -r requirements.txt
+        run: python -m pip install -r requirements.txt
+
+      - name: Install Test Dependencies
+        run: python -m pip install pytest
 
       - name: Run Automated Tests
-        run: pytest -q
+        run: python -m pytest -q
 
       - name: Verify FastAPI Application
         run: python -c "from main import app; print('FastAPI application imported successfully')"
