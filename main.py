@@ -2,6 +2,10 @@ from fastapi import Request
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+import time
+import uuid
+
+from utils.logging_config import request_id_context
 
 import logging
 from fastapi import (
@@ -25,6 +29,72 @@ from auth.jwt_handler import create_access_token
 from auth.dependencies import get_current_user
 
 app=FastAPI()
+
+class RequestIDMiddleware:
+    """Attach a unique request ID to every HTTP request."""
+
+    def __init__(self, app):
+        self.app = app
+        self.logger = logging.getLogger(__name__)
+
+    async def __call__(self, scope, receive, send):
+
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request_id = uuid.uuid4().hex
+        token = request_id_context.set(request_id)
+
+        start_time = time.perf_counter()
+        status_code = 500
+
+        async def send_with_request_id(message):
+            nonlocal status_code
+
+            if message["type"] == "http.response.start":
+                status_code = message["status"]
+
+                headers = list(message.get("headers", []))
+                headers.append(
+                    (b"x-request-id", request_id.encode("ascii"))
+                )
+
+                message["headers"] = headers
+
+            await send(message)
+
+        try:
+            self.logger.info(
+                "HTTP request started | method=%s | path=%s",
+                scope["method"],
+                scope["path"],
+            )
+
+            await self.app(scope, receive, send_with_request_id)
+
+        except Exception:
+            self.logger.exception("Unhandled HTTP request exception")
+            raise
+
+        finally:
+            duration_ms = round(
+                (time.perf_counter() - start_time) * 1000,
+                2,
+            )
+
+            self.logger.info(
+                "HTTP request completed | status_code=%s | duration_ms=%s",
+                status_code,
+                duration_ms,
+            )
+
+            request_id_context.reset(token)
+
+
+app.add_middleware(RequestIDMiddleware)
+
+
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
