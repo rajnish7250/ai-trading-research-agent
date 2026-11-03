@@ -1,32 +1,58 @@
+
+import logging
+import time
+
 from state.market_state import MarketState
 from memory.vector_store import get_vector_db
 from config import MEMORY_SIMILARITY_THRESHOLD
 
+logger = logging.getLogger(__name__)
+
 
 def memory_filter_node(state: MarketState):
-    
-    user_id = state.get("user_id")
+    start_time = time.perf_counter()
 
-    if not user_id:
-        return {
-            "memory_approved": False,
-            "memory_text": "",
-        }
+    logger.info("Memory filter node started")
 
-    report = state.get("research_summary")
+    def log_rejection(reason: str, **details):
+        duration_ms = round(
+            (time.perf_counter() - start_time) * 1000,
+            2,
+        )
 
-    print("\nMemory Filtering Running...\n")
+        detail_message = " | ".join(
+            f"{key}={value}" for key, value in details.items()
+        )
 
-    # Empty Check
-    if report is None:
-        print("Rejected: No research summary")
-        return {
-            "memory_approved": False,
-            "memory_text": ""
-        }
+        logger.info(
+            "Memory filter rejected | reason=%s | %s"
+            "duration_ms=%s",
+            reason,
+            detail_message + " | " if detail_message else "",
+            duration_ms,
+        )
 
-    # Convert structured ResearchReport into plain text
-    summary = f"""
+    try:
+        user_id = state.get("user_id")
+
+        if not user_id:
+            log_rejection("missing_user_id")
+            return {
+                "memory_approved": False,
+                "memory_text": "",
+            }
+
+        report = state.get("research_summary")
+
+        if report is None:
+            log_rejection("missing_research_summary")
+            return {
+                "memory_approved": False,
+                "memory_text": "",
+            }
+
+        # Convert structured ResearchReport into plain text.
+        summary = f"""
 Executive Summary:
 {report.executive_summary}
 
@@ -46,73 +72,74 @@ Watch Items:
 {chr(10).join("- " + item for item in report.watch_items)}
 """.strip()
 
-    summary_length = len(summary)
+        summary_length = len(summary)
 
-    # Empty Check
-    if not summary:
-        print("Rejected: Empty summary")
-        return {
-            "memory_approved": False,
-            "memory_text": ""
-        }
-
-    # Length Check
-    if summary_length < 100:
-        print(f"Rejected: Summary too short ({summary_length} chars)")
-        return {
-            "memory_approved": False,
-            "memory_text": ""
-        }
-
-    # -----------------------------------
-    # Similarity Search (Observation Mode)
-    # -----------------------------------
-
-    vector_db = get_vector_db()
-
-    results = vector_db.similarity_search_with_score(
-        summary,
-        k=1,
-        filter={"user_id": user_id},
-    )
-
-    if results:
-        doc, score = results[0]
-
-        print(f"\nSIMILARITY SCORE: {score}")
-
-        if score < MEMORY_SIMILARITY_THRESHOLD:
-            print("Rejected: Memory already exists")
+        if not summary:
+            log_rejection("empty_summary")
             return {
                 "memory_approved": False,
-                "memory_text": ""
+                "memory_text": "",
             }
 
-    print("Approved for Storage")
+        if summary_length < 100:
+            log_rejection(
+                "summary_too_short",
+                summary_length=summary_length,
+            )
+            return {
+                "memory_approved": False,
+                "memory_text": "",
+            }
 
-    return {
-        "memory_approved": True,
-        "memory_text": summary
-    }
+        vector_db = get_vector_db()
 
+        results = vector_db.similarity_search_with_score(
+            summary,
+            k=1,
+            filter={"user_id": user_id},
+        )
 
-if __name__ == "__main__":
+        if results:
+            _, score = results[0]
 
-    vector_db = get_vector_db()
+            if score < MEMORY_SIMILARITY_THRESHOLD:
+                log_rejection(
+                    "duplicate_memory",
+                    similarity_score=score,
+                )
+                return {
+                    "memory_approved": False,
+                    "memory_text": "",
+                }
 
-    test_text = """
-    Bitcoin ETF assets declined significantly.
-    """
+        duration_ms = round(
+            (time.perf_counter() - start_time) * 1000,
+            2,
+        )
 
-    results = vector_db.similarity_search_with_score(
-        test_text,
-        k=3
-    )
+        logger.info(
+            "Memory filter approved | summary_length=%s | "
+            "duplicate_check_results=%s | duration_ms=%s",
+            summary_length,
+            len(results),
+            duration_ms,
+        )
 
-    print("\nSEARCH RESULTS:\n")
+        return {
+            "memory_approved": True,
+            "memory_text": summary,
+        }
 
-    for i, (doc, score) in enumerate(results, start=1):
-        print(f"\nResult {i}")
-        print("-" * 50)
-        print(f"Score: {score}")
-        print(doc.page_content[:300])
+    except Exception as exc:
+        duration_ms = round(
+            (time.perf_counter() - start_time) * 1000,
+            2,
+        )
+
+        logger.error(
+            "Memory filter failed | duration_ms=%s | error_type=%s",
+            duration_ms,
+            type(exc).__name__,
+        )
+
+        raise
