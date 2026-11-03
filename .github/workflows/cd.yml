@@ -1,8 +1,9 @@
 name: Continuous Deployment
 
 on:
-  workflow_dispatch: #workflow_dispatch allows you to manually trigger the workflow from the Github actions tab. 
-  workflow_run: #it runs when the workflow run is completed automatically.
+  workflow_dispatch:
+
+  workflow_run:
     workflows:
       - Continuous Integration
     types:
@@ -10,59 +11,229 @@ on:
 
 jobs:
   deploy:
-
-    if: ${{ (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master') ||
-          (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
+    if: >-
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/master') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'master')
 
     runs-on: ubuntu-latest
-    steps:
 
+    steps:
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.2.2
+
         env:
           IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: IMAGE_TAG
+
           script: |
+            set -eu
+
+            IMAGE_REPO="rajnishk2439/ai-trading-api"
+            IMAGE="${IMAGE_REPO}:${IMAGE_TAG}"
+
+            DATA_DIR="/home/ubuntu/trading-api-data"
+            ENV_FILE="/home/ubuntu/ai-trading-research-agent/.env"
+
             echo "======================================"
             echo "Deploying AI Trading API"
-            echo "Commit SHA : ${IMAGE_TAG}"
+            echo "Commit SHA: ${IMAGE_TAG}"
             echo "======================================"
-            
-            docker pull rajnishk2439/ai-trading-api:${IMAGE_TAG}
-            docker pull rajnishk2439/ai-trading-api:latest
 
-            docker stop trading-api || true
+            # 1. Verify deployment prerequisites.
 
-            docker rm trading-api || true
+            if [ ! -f "$ENV_FILE" ]; then
+              echo "ERROR: Environment file not found."
+              exit 1
+            fi
 
-            docker run -d \
+            if [ ! -d "$DATA_DIR/chroma_db" ]; then
+              echo "ERROR: ChromaDB directory not found."
+              exit 1
+            fi
+
+            if [ ! -f "$DATA_DIR/research_history.db" ]; then
+              echo "ERROR: Research history database not found."
+              exit 1
+            fi
+
+            AVAILABLE_BYTES=$(df -PB1 / | awk 'NR==2 {print $4}')
+            MIN_FREE_BYTES=$((15 * 1024 * 1024 * 1024))
+
+            echo "Available disk space: $AVAILABLE_BYTES bytes"
+
+            if [ "$AVAILABLE_BYTES" -lt "$MIN_FREE_BYTES" ]; then
+              echo "ERROR: Insufficient disk space."
+              echo "At least 15 GiB free space is required."
+              exit 1
+            fi
+
+            # 2. Pull the exact image before touching production.
+
+            echo "Pulling image: $IMAGE"
+
+            if ! docker pull "$IMAGE"; then
+              echo "ERROR: Image pull failed. Existing API is untouched."
+              exit 1
+            fi
+
+            NEW_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$IMAGE")
+
+            # 3. Identify the currently running production container.
+
+            OLD_CONTAINER=""
+
+            if docker inspect trading-api >/dev/null 2>&1; then
+              OLD_CONTAINER="trading-api"
+            elif docker inspect trading-api-pre-replacement >/dev/null 2>&1; then
+              OLD_CONTAINER="trading-api-pre-replacement"
+            fi
+
+            PREVIOUS_IMAGE_ID=""
+
+            if [ -n "$OLD_CONTAINER" ]; then
+              PREVIOUS_IMAGE_ID=$(docker inspect --format '{{.Image}}' "$OLD_CONTAINER")
+            fi
+
+            BACKUP_CONTAINER=""
+
+            # 4. Preserve the existing container for rollback.
+
+            if [ -n "$OLD_CONTAINER" ]; then
+
+              BACKUP_CONTAINER="trading-api-previous-$(date +%Y%m%d%H%M%S)"
+
+              echo "Preserving existing container: $OLD_CONTAINER"
+
+              if ! docker stop "$OLD_CONTAINER"; then
+                echo "ERROR: Could not stop existing container."
+                exit 1
+              fi
+
+              if ! docker rename "$OLD_CONTAINER" "$BACKUP_CONTAINER"; then
+                echo "ERROR: Could not preserve existing container."
+                docker start "$OLD_CONTAINER" || true
+                exit 1
+              fi
+
+            fi
+
+            # 5. Start the new container with persistent storage.
+
+            echo "Starting new production container..."
+
+            if ! docker run -d \
               --name trading-api \
               --restart unless-stopped \
               -p 8000:8000 \
-              --env-file /home/ubuntu/ai-trading-research-agent/.env \
-              -e APP_VERSION=${IMAGE_TAG} \
-              rajnishk2439/ai-trading-api:${IMAGE_TAG}
+              --env-file "$ENV_FILE" \
+              -e APP_VERSION="$IMAGE_TAG" \
+              -v "$DATA_DIR/chroma_db:/app/chroma_db" \
+              -v "$DATA_DIR/research_history.db:/app/research_history.db" \
+              "$IMAGE"; then
+
+              echo "ERROR: New container failed to start."
+
+              if [ -n "$BACKUP_CONTAINER" ]; then
+                docker rename "$BACKUP_CONTAINER" "$OLD_CONTAINER"
+                docker start "$OLD_CONTAINER"
+              fi
+
+              exit 1
+            fi
+
+            # 6. Verify application health.
 
             echo "Waiting for application to become healthy..."
 
-            for i in {1..30}; do
+            HEALTHY=0
+            ATTEMPT=1
 
-              if curl --fail http://localhost:8000/health; then
-                echo "Application is healthy."
-                exit 0
+            while [ "$ATTEMPT" -le 30 ]; do
+
+              if curl --silent --show-error --fail \
+                http://localhost:8000/health >/dev/null; then
+
+                HEALTHY=1
+                break
               fi
 
-              echo "Waiting... ($i/30)"
+              echo "Waiting... ($ATTEMPT/30)"
               sleep 5
+
+              ATTEMPT=$((ATTEMPT + 1))
 
             done
 
-            echo "Health check failed after waiting."
+            # 7. Automatically roll back if health check fails.
 
-            docker logs trading-api
+            if [ "$HEALTHY" -ne 1 ]; then
 
-            exit 1
+              echo "ERROR: New deployment failed health check."
+
+              docker logs --tail 100 trading-api || true
+
+              docker rm -f trading-api || true
+
+              if [ -n "$BACKUP_CONTAINER" ]; then
+                echo "Restoring previous production container..."
+
+                docker rename "$BACKUP_CONTAINER" "$OLD_CONTAINER"
+                docker start "$OLD_CONTAINER"
+
+                echo "Rollback completed."
+              else
+                echo "No previous container available for rollback."
+              fi
+
+              exit 1
+            fi
+
+            echo "New application is healthy."
+
+            # 8. Remove the old container only after successful deployment.
+
+            if [ -n "$BACKUP_CONTAINER" ]; then
+
+              echo "Removing previous stopped container..."
+
+              docker rm "$BACKUP_CONTAINER"
+
+            fi
+
+            # 9. Retain current and previous production images.
+            # Remove other obsolete images only after successful deployment.
+
+            if [ -n "$PREVIOUS_IMAGE_ID" ]; then
+
+              echo "Cleaning obsolete Docker images..."
+
+              docker image ls --no-trunc -q "$IMAGE_REPO" | sort -u | while IFS= read -r IMAGE_ID; do
+
+                if [ "$IMAGE_ID" != "$NEW_IMAGE_ID" ] &&
+                   [ "$IMAGE_ID" != "$PREVIOUS_IMAGE_ID" ]; then
+
+                  echo "Removing obsolete image: $IMAGE_ID"
+                  docker rmi "$IMAGE_ID" || echo "WARNING: Could not remove $IMAGE_ID"
+
+                fi
+
+              done
+
+            else
+
+              echo "No previous image identified. Skipping image cleanup."
+
+            fi
+
+            echo "======================================"
+            echo "Deployment completed successfully."
+            echo "Current image: $IMAGE"
+            echo "======================================"
