@@ -52,21 +52,23 @@ graph_builder.add_edge(START,"retriever")
 graph_builder.add_edge(START,"tavily")
 graph_builder.add_edge(START,"yfinance")
 
-graph_builder.add_edge("retriever", "news_agent")
-graph_builder.add_edge("retriever", "sentiment")
-graph_builder.add_edge("retriever", "risk_agent")
+graph_builder.add_edge(
+    ["retriever", "tavily", "yfinance"],
+    "news_agent"
+)
+graph_builder.add_edge(
+    ["retriever", "tavily", "yfinance"],
+    "sentiment"
+)
+graph_builder.add_edge(
+    ["retriever", "tavily", "yfinance"],
+    "risk_agent"
+)
 
-graph_builder.add_edge("tavily", "news_agent")
-graph_builder.add_edge("tavily", "sentiment")
-graph_builder.add_edge("tavily", "risk_agent")
-
-graph_builder.add_edge("yfinance", "news_agent")
-graph_builder.add_edge("yfinance", "sentiment")
-graph_builder.add_edge("yfinance", "risk_agent")
-
-graph_builder.add_edge("news_agent", "summary")
-graph_builder.add_edge("sentiment", "summary")
-graph_builder.add_edge("risk_agent", "summary")
+graph_builder.add_edge(
+    ["news_agent", "sentiment", "risk_agent"],
+    "summary"
+)
 
 graph_builder.add_edge("summary", "memory_filter")
 graph_builder.add_edge("memory_filter", "memory_compression")
