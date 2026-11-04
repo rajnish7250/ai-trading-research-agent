@@ -1,40 +1,24 @@
-##Method 1: Similarity Search Test
-# from memory.vector_store import get_vector_db
 
-# db=get_vector_db()
-# results= db.similarity_search(
-#     "Bitcoin ETF inflows",
-#     k=5
-# )
+"""
+Manual ChromaDB inspection utility.
 
-# print(f"found{len(results)} documents \n")
+Run directly:
+python tests/test_memory.py
 
-# for i, doc in enumerate(results):
-#     print(f"Document {i+1}:")
-#     print("-"*50)
-#     print(doc.page_content)
-#     print(doc.metadata)
-#     print()
-    
-###Method 2: Show entire Collection
-from memory.vector_store import get_vector_db
-db = get_vector_db()
-collection = db._collection
-data = collection.get()
-print("TOTAL MEMORIES:", len(data["documents"]))
-for i, doc in enumerate(data["documents"], start=1):
-    print("\n-------------------")
-    print(f"Memory #{i}")
-    print(doc)
-    print(data["metadatas"][i-1])
-    
-###Method 3: Check Chroma MetaData(Useful for debugging duplicates)
-# from memory.vector_store import get_vector_db
+This is intentionally not an automated pytest test.
+"""
 
-# db = get_vector_db()
+if __name__ == "__main__":
+    from memory.vector_store import get_vector_db
 
-# collection = db._collection
+    db = get_vector_db()
+    collection = db._collection
+    data = collection.get()
 
-# data = collection.get()
+    print("TOTAL MEMORIES:", len(data["documents"]))
 
-# print(data.keys())
+    for i, doc in enumerate(data["documents"], start=1):
+        print(f"\nMemory #{i}")
+        print("-" * 40)
+        print(doc)
+        print(data["metadatas"][i - 1])
