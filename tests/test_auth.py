@@ -135,3 +135,66 @@ def test_research_history_is_isolated_by_user(monkeypatch, tmp_path):
     assert len(bob_history) == 1
     assert bob_history[0]["query"] == "Bob private query"
     assert bob_history[0]["result"]["report"] == "Bob private report"
+
+def test_request_id_propagates_to_research_service_and_is_isolated(
+    monkeypatch,
+):
+    from utils.logging_config import request_id_context
+
+    captured_request_ids = []
+
+    def mock_perform_research(query, user_id):
+        captured_request_ids.append(request_id_context.get())
+
+        return {
+            "market_price_data": "Mock price",
+            "news_summary": "Mock news",
+            "sentiment": "Bullish",
+            "risk_analysis": "Moderate risk",
+            "final_response": "Mock research report",
+        }
+
+    monkeypatch.setattr(
+        "main.perform_research",
+        mock_perform_research,
+    )
+
+    monkeypatch.setattr(
+        "main.save_research",
+        lambda **kwargs: None,
+    )
+
+    headers = authenticate_as(
+        monkeypatch,
+        "request_id_test@example.com",
+    )
+
+    first_response = client.post(
+        "/research",
+        json={"query": "Analyze BTC-USD"},
+        headers=headers,
+    )
+
+    second_response = client.post(
+        "/research",
+        json={"query": "Analyze ETH-USD"},
+        headers=headers,
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    
+    first_request_id = first_response.headers["x-request-id"]
+    second_request_id = second_response.headers["x-request-id"]
+
+    
+
+    assert first_request_id
+    assert second_request_id
+
+    assert first_request_id != second_request_id
+
+    assert captured_request_ids == [
+        first_request_id,
+        second_request_id,
+    ]

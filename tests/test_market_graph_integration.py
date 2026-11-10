@@ -767,5 +767,53 @@ def test_actual_market_graph_rejects_short_memory(
     assert result["memory_saved"] is False
     split_summary_mock.assert_not_called()
     fake_db.add_documents.assert_not_called()
+    
+    
+def test_langgraph_parallel_nodes_receive_request_id():
+    from langgraph.graph import StateGraph, START, END
+    from utils.logging_config import request_id_context
+    from typing import TypedDict
+
+    class TestState(TypedDict, total=False):
+        completed: list[str]
+
+    captured_request_ids = {}
+
+    def make_node(name):
+        def node(state):
+            captured_request_ids[name] = request_id_context.get()
+            return {}
+        return node
+
+    builder = StateGraph(TestState)
+
+    builder.add_node("news_agent", make_node("news_agent"))
+    builder.add_node("sentiment", make_node("sentiment"))
+    builder.add_node("risk_agent", make_node("risk_agent"))
+
+    builder.add_edge(START, "news_agent")
+    builder.add_edge(START, "sentiment")
+    builder.add_edge(START, "risk_agent")
+
+    builder.add_edge(
+        ["news_agent", "sentiment", "risk_agent"],
+        END,
+    )
+
+    graph = builder.compile()
+
+    request_id = "test-request-123"
+    token = request_id_context.set(request_id)
+
+    try:
+        graph.invoke({"completed": []})
+    finally:
+        request_id_context.reset(token)
+
+    assert captured_request_ids == {
+        "news_agent": request_id,
+        "sentiment": request_id,
+        "risk_agent": request_id,
+    }
 
 
