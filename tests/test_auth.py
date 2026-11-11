@@ -198,3 +198,36 @@ def test_request_id_propagates_to_research_service_and_is_isolated(
         first_request_id,
         second_request_id,
     ]
+def test_research_failure_is_logged_and_returns_safe_error(
+    monkeypatch,
+    caplog,
+):
+    import logging
+
+    def mock_failed_research(query, user_id):
+        raise RuntimeError("Simulated provider failure")
+
+    monkeypatch.setattr(
+        "main.perform_research",
+        mock_failed_research,
+    )
+
+    headers = authenticate_as(
+        monkeypatch,
+        "failure_test@example.com",
+    )
+
+    with caplog.at_level(logging.ERROR, logger="main"):
+        response = client.post(
+            "/research",
+            json={"query": "Analyze BTC-USD"},
+            headers=headers,
+        )
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "detail": "Internal Server Error"
+    }
+
+    assert "Research request failed" in caplog.text
+    assert "RuntimeError" in caplog.text
