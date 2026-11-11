@@ -132,6 +132,9 @@ jobs:
             if ! docker run -d \
               --name trading-api \
               --restart unless-stopped \
+              --log-driver json-file \
+              --log-opt max-size=10m \
+              --log-opt max-file=3 \
               -p 8000:8000 \
               --env-file "$ENV_FILE" \
               -e APP_VERSION="$IMAGE_TAG" \
