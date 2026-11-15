@@ -23,3 +23,22 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  trading-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    image: ai-trading-frontend:local
+    container_name: trading-frontend
+
+    environment:
+      API_BASE_URL: http://trading-api:8000
+
+    ports:
+      - "127.0.0.1:8501:8501"
+
+    depends_on:
+      - trading-api
+
+    restart: unless-stopped

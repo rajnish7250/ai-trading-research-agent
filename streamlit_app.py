@@ -14,7 +14,7 @@ REQUEST_TIMEOUT = 180
 
 st.set_page_config(
     page_title="AI Trading Research Agent",
-    page_icon="📈",
+    page_icon="ðŸ“ˆ",
     layout="wide",
 )
 
@@ -23,6 +23,17 @@ def api_headers():
     return {
         "Authorization": f"Bearer {st.session_state.token}"
     }
+
+def expire_session():
+    """Clear authentication state when the JWT expires."""
+    st.session_state.token = None
+    st.session_state.email = None
+    st.session_state.history = []
+    st.session_state.history_loaded = False
+    st.session_state.selected_report = None
+
+    st.error("Your session has expired. Please log in again.")
+    st.rerun()
 
 
 def load_history():
@@ -35,14 +46,11 @@ def load_history():
     )
 
     if response.status_code == 401:
-        st.session_state.token = None
-        st.session_state.email = None
-        st.session_state.history = []
-        st.error("Your session has expired. Please log in again.")
-        st.rerun()
+        expire_session()
 
     response.raise_for_status()
     st.session_state.history = response.json()
+    st.session_state.history_loaded = True
 
 
 def login(email, password):
@@ -61,6 +69,7 @@ def login(email, password):
     st.session_state.token = response.json()["access_token"]
     st.session_state.email = email
     st.session_state.history = []
+    st.session_state.history_loaded = False
     return True
 
 
@@ -68,6 +77,8 @@ def logout():
     st.session_state.token = None
     st.session_state.email = None
     st.session_state.history = []
+    st.session_state.history_loaded = False
+    st.session_state.selected_report = None
     st.rerun()
 
 
@@ -84,8 +95,11 @@ if "history" not in st.session_state:
 if "selected_report" not in st.session_state:
     st.session_state.selected_report = None
 
+if "history_loaded" not in st.session_state:
+    st.session_state.history_loaded = False
 
-st.title("📈 AI Trading Research Agent")
+
+st.title("ðŸ“ˆ AI Trading Research Agent")
 st.caption(
     "Multi-agent market research powered by LangGraph, "
     "RAG, market data, news, sentiment and risk analysis."
@@ -111,11 +125,32 @@ if not st.session_state.token:
             try:
                 if login(email.strip(), password):
                     st.rerun()
-            except requests.RequestException:
-                st.error(
-                    "Cannot connect to the API. "
-                    "Check that FastAPI is running and API_BASE_URL is correct."
+            except requests.HTTPError as exc:
+                status_code = (
+                    exc.response.status_code
+                    if exc.response is not None
+                    else None
                 )
+
+                if status_code == 403:
+                    st.error("Access denied. Please contact the administrator.")
+                elif status_code == 422:
+                    st.error("Invalid login request. Please check your input.")
+                elif status_code == 429:
+                    st.error("Too many login attempts. Please wait and try again.")
+                elif status_code and status_code >= 500:
+                    st.error("Login service is temporarily unavailable.")
+                else:
+                    st.error(f"Login failed. HTTP {status_code or 'unknown'}.")
+
+            except requests.Timeout:
+                st.error("Login request timed out. Please try again.")
+
+            except requests.ConnectionError:
+                st.error("Cannot connect to the API. Check whether FastAPI is running.")
+
+            except requests.RequestException:
+                st.error("An unexpected error occurred during login.")
 
     st.info("Log in to research markets and access your saved reports.")
     st.stop()
@@ -129,9 +164,30 @@ with st.sidebar:
     if st.button("Refresh history", use_container_width=True):
         try:
             load_history()
+            st.success("Research history refreshed.")
             st.rerun()
+
+        except requests.HTTPError as exc:
+            status_code = (
+                exc.response.status_code
+                if exc.response is not None
+                else None
+            )
+
+            if status_code == 401:
+                expire_session()
+            elif status_code == 403:
+                st.error("You don't have permission to view this history.")
+            elif status_code and status_code >= 500:
+                st.error("Server error while loading history. Try again later.")
+            else:
+                st.error(f"Could not load history. HTTP {status_code or 'unknown'}.")
+
+        except requests.Timeout:
+            st.error("History request timed out. Please try again.")
+
         except requests.RequestException:
-            st.error("Could not load research history.")
+            st.error("Cannot connect to the API.")
 
     if st.button("Log out", use_container_width=True):
         logout()
@@ -147,7 +203,7 @@ with st.sidebar:
         for item in history:
             label = (
                 f"{item['query'][:45]} "
-                f"· {item['created_at'][:10]}"
+                f"Â· {item['created_at'][:10]}"
             )
 
             if st.button(
@@ -160,7 +216,7 @@ with st.sidebar:
 
 
 # Load history after login or when the page session is restored.
-if not st.session_state.history:
+if not st.session_state.history_loaded:
     try:
         load_history()
     except requests.RequestException:
@@ -212,6 +268,8 @@ else:
                         json={"query": query.strip()},
                         timeout=REQUEST_TIMEOUT,
                     )
+                    if response.status_code == 401:
+                        expire_session()
 
                     response.raise_for_status()
                     result = response.json()
@@ -247,13 +305,21 @@ else:
                 status_code = (
                     exc.response.status_code
                     if exc.response is not None
-                    else "unknown"
+                    else None
                 )
-                st.error(
-                    f"The API returned HTTP {status_code}. "
-                    "Check the API logs for details."
-                )
+                if status_code == 401:
+                    expire_session()
 
+                elif status_code == 403:
+                    st.error("You don't have permission to perform this action. ")
+                elif status_code == 422:
+                    st.error("The research request contains invalid data. Please check your input.")
+                elif status_code == 429:
+                    st.error("API rate limit reached. Please wait before trying again.")
+                elif status_code and status_code >= 500:
+                    st.error("The server encountered an error. Please try again later.")
+                else:
+                    st.error(f"API request failed. HTTP status: {status_code or 'unknown'}")
             except requests.Timeout:
                 st.error(
                     "The research request timed out. "
@@ -269,5 +335,5 @@ else:
 
 st.divider()
 st.caption(
-    "Streamlit UI · FastAPI · LangGraph · RAG · ChromaDB · SQLite"
+    "Streamlit UI Â· FastAPI Â· LangGraph Â· RAG Â· ChromaDB Â· SQLite"
 )
