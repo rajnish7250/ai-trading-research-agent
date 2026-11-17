@@ -26,80 +26,121 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       # 1. Checkout the exact commit that CI built.
       - name: Checkout deployment commit
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
-      # 2. Transfer production Compose configuration to EC2.
-      - name: Copy production Compose file to EC2
+      # 2. Upload candidate Compose file to a temporary location.
+      - name: Upload candidate Compose file to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           source: "docker-compose.prod.yml"
-          target: "/home/ubuntu/ai-trading-research-agent/"
+          target: "/tmp/"
+          overwrite: true
 
-      # 3. Deploy application using Docker Compose.
+      # 3. Deploy both applications using Docker Compose.
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.2.2
 
         env:
           IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          FRONTEND_IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: IMAGE_TAG
+          envs: IMAGE_TAG,FRONTEND_IMAGE_TAG
 
           script: |
             set -eu
 
-            IMAGE_REPO="rajnishk2439/ai-trading-api"
-            IMAGE="${IMAGE_REPO}:${IMAGE_TAG}"
+            API_REPO="rajnishk2439/ai-trading-api"
+            FRONTEND_REPO="rajnishk2439/ai-trading-frontend"
+
+            IMAGE="${API_REPO}:${IMAGE_TAG}"
+            FRONTEND_IMAGE="${FRONTEND_REPO}:${FRONTEND_IMAGE_TAG}"
 
             APP_DIR="/home/ubuntu/ai-trading-research-agent"
             COMPOSE_FILE="${APP_DIR}/docker-compose.prod.yml"
+            COMPOSE_CANDIDATE="${APP_DIR}/docker-compose.prod.yml.candidate"
+            COMPOSE_BACKUP="${APP_DIR}/docker-compose.prod.yml.previous"
+            UPLOADED_COMPOSE="/tmp/docker-compose.prod.yml"
             ENV_FILE="${APP_DIR}/.env"
             DATA_DIR="/home/ubuntu/trading-api-data"
 
             cd "$APP_DIR"
 
-            export IMAGE
-            export IMAGE_TAG
-            # Reusable health check for restored production containers.
-            wait_for_health() {
+            export IMAGE IMAGE_TAG
+            export FRONTEND_IMAGE FRONTEND_IMAGE_TAG
 
-              echo "Checking restored application health..."
+            # Prepare candidate production Compose configuration.
+            if [ ! -f "$UPLOADED_COMPOSE" ]; then
+              echo "ERROR: Uploaded candidate Compose file not found."
+              exit 1
+            fi
+
+            cp "$UPLOADED_COMPOSE" "$COMPOSE_CANDIDATE"
+
+            # Health check for FastAPI.
+            wait_for_api_health() {
+              echo "Checking FastAPI health..."
 
               ATTEMPT=1
 
               while [ "$ATTEMPT" -le 30 ]; do
-
                 if curl --silent --show-error --fail \
                   http://127.0.0.1:8000/health >/dev/null; then
-
-                  echo "Restored application is healthy."
+                  echo "FastAPI is healthy."
                   return 0
                 fi
 
-                echo "Waiting for restored application... ($ATTEMPT/30)"
+                echo "Waiting for FastAPI... ($ATTEMPT/30)"
                 sleep 5
                 ATTEMPT=$((ATTEMPT + 1))
-
               done
 
-              echo "CRITICAL: Restored application failed health check."
+              echo "ERROR: FastAPI health check failed."
               return 1
             }
 
+            # Health check for Streamlit.
+            wait_for_frontend_health() {
+              echo "Checking Streamlit health..."
+
+              ATTEMPT=1
+
+              while [ "$ATTEMPT" -le 30 ]; do
+                if curl --silent --show-error --fail \
+                  http://127.0.0.1:8501/_stcore/health >/dev/null; then
+                  echo "Streamlit is healthy."
+                  return 0
+                fi
+
+                echo "Waiting for Streamlit... ($ATTEMPT/30)"
+                sleep 5
+                ATTEMPT=$((ATTEMPT + 1))
+              done
+
+              echo "ERROR: Streamlit health check failed."
+              return 1
+            }
+
+            wait_for_all_health() {
+              wait_for_api_health || return 1
+              wait_for_frontend_health || return 1
+            }
+
             echo "======================================"
-            echo "Deploying AI Trading API"
+            echo "Deploying AI Trading Research Platform"
             echo "Commit SHA: ${IMAGE_TAG}"
+            echo "API image: ${IMAGE}"
+            echo "Frontend image: ${FRONTEND_IMAGE}"
             echo "======================================"
 
             # 1. Verify deployment prerequisites.
@@ -140,48 +181,65 @@ jobs:
               exit 1
             fi
 
-            # 2. Validate Compose configuration.
+            # 2. Validate production Compose configuration.
 
             echo "Validating production Compose configuration..."
 
-            docker compose -f "$COMPOSE_FILE" config --quiet
+            docker compose -f "$COMPOSE_CANDIDATE" config --quiet
 
-            # 3. Pull the exact image before touching production.
+            # 3. Pull both exact images before touching production.
 
-            echo "Pulling image: $IMAGE"
+            echo "Pulling API image: $IMAGE"
 
             if ! docker pull "$IMAGE"; then
-              echo "ERROR: Image pull failed. Existing API is untouched."
+              echo "ERROR: API image pull failed. Running containers are untouched."
               exit 1
             fi
 
-            NEW_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$IMAGE")
+            echo "Pulling frontend image: $FRONTEND_IMAGE"
 
-            # 4. Identify the currently running production container.
+            if ! docker pull "$FRONTEND_IMAGE"; then
+              echo "ERROR: Frontend image pull failed. Running containers are untouched."
+              exit 1
+            fi
+
+            NEW_API_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$IMAGE")
+            NEW_FRONTEND_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$FRONTEND_IMAGE")
+
+            # 4. Identify the currently running production containers.
 
             OLD_CONTAINER=""
-            PREVIOUS_IMAGE=""
-            PREVIOUS_IMAGE_ID=""
+            PREVIOUS_API_IMAGE=""
+            PREVIOUS_API_IMAGE_ID=""
+            PREVIOUS_FRONTEND_IMAGE=""
+            PREVIOUS_FRONTEND_IMAGE_ID=""
             BACKUP_CONTAINER=""
 
             if docker inspect trading-api >/dev/null 2>&1; then
-
               OLD_CONTAINER="trading-api"
 
-              PREVIOUS_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$OLD_CONTAINER")
-              PREVIOUS_IMAGE_ID=$(docker inspect --format '{{.Image}}' "$OLD_CONTAINER")
+              PREVIOUS_API_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$OLD_CONTAINER")
+              PREVIOUS_API_IMAGE_ID=$(docker inspect --format '{{.Image}}' "$OLD_CONTAINER")
 
-              echo "Existing image: $PREVIOUS_IMAGE"
-
+              echo "Previous API image: $PREVIOUS_API_IMAGE"
+            else
+              echo "WARNING: No existing API container identified."
             fi
 
-            # Determine whether this is the first migration from docker run.
-            # Docker Run containers do not have Compose project labels.
+            if docker inspect trading-frontend >/dev/null 2>&1; then
+              PREVIOUS_FRONTEND_IMAGE=$(docker inspect --format '{{.Config.Image}}' trading-frontend)
+              PREVIOUS_FRONTEND_IMAGE_ID=$(docker inspect --format '{{.Image}}' trading-frontend)
+
+              echo "Previous frontend image: $PREVIOUS_FRONTEND_IMAGE"
+            else
+              echo "No previous frontend container found. First frontend deployment."
+            fi
+
+            # 5. Determine whether the API is Compose-managed.
 
             IS_COMPOSE_MANAGED=0
 
             if [ -n "$OLD_CONTAINER" ]; then
-
               COMPOSE_PROJECT=$(docker inspect \
                 --format '{{ index .Config.Labels "com.docker.compose.project" }}' \
                 "$OLD_CONTAINER")
@@ -190,10 +248,10 @@ jobs:
                  [ -n "$COMPOSE_PROJECT" ]; then
                 IS_COMPOSE_MANAGED=1
               fi
-
             fi
 
-            # 5. Preserve the old Docker Run container during first migration.
+
+            # Preserve an older Docker Run container during first migration.
 
             if [ -n "$OLD_CONTAINER" ] &&
                [ "$IS_COMPOSE_MANAGED" -eq 0 ]; then
@@ -204,7 +262,7 @@ jobs:
               echo "Preserving existing Docker Run container."
 
               if ! docker stop "$OLD_CONTAINER"; then
-                echo "ERROR: Could not stop existing container."
+                echo "ERROR: Could not stop existing API container."
                 exit 1
               fi
 
@@ -213,217 +271,205 @@ jobs:
                 docker start "$OLD_CONTAINER" || true
                 exit 1
               fi
-
             fi
 
-            # 6. Deploy the new application using Docker Compose.
+            # Back up the currently active production Compose file.
+            echo "Backing up current production Compose configuration..."
 
-            echo "Starting application using Docker Compose..."
+            if [ ! -f "$COMPOSE_FILE" ]; then
+              echo "ERROR: Active Compose file is missing."
+              exit 1
+            fi
+
+            cp -p "$COMPOSE_FILE" "$COMPOSE_BACKUP"
+
+            # Atomically activate the validated candidate.
+            echo "Activating validated Compose configuration..."
+
+            mv -f "$COMPOSE_CANDIDATE" "$COMPOSE_FILE"
+
+            echo "Production Compose configuration updated."
+
+            # 6. Rollback function for both applications.
+
+            rollback_deployment() {
+              echo "======================================"
+              echo "ROLLBACK STARTED"
+              echo "======================================"
+
+              # Restore the previous production Compose configuration first.
+              echo "Restoring previous Compose configuration..."
+
+              if [ ! -f "$COMPOSE_BACKUP" ]; then
+                echo "CRITICAL: Previous Compose backup is missing."
+                return 1
+              fi
+
+              RESTORE_FILE="${COMPOSE_FILE}.restore"
+
+              cp -p "$COMPOSE_BACKUP" "$RESTORE_FILE" || return 1
+              mv -f "$RESTORE_FILE" "$COMPOSE_FILE" || return 1
+
+              echo "Previous Compose configuration restored."
+
+              # Restore an older Docker Run container if applicable.
+              if [ -n "$BACKUP_CONTAINER" ]; then
+                echo "Restoring original Docker Run API container..."
+
+                docker rm -f trading-frontend || true
+                docker rm -f trading-api || true
+
+                docker rename "$BACKUP_CONTAINER" trading-api
+                docker start trading-api
+
+                wait_for_api_health || return 1
+                return 0
+              fi
+
+              # Restore the previous Compose-managed API.
+              if [ -n "$PREVIOUS_API_IMAGE" ]; then
+
+                # Reapply the old image tag if its tag was removed.
+                if ! docker image inspect "$PREVIOUS_API_IMAGE" >/dev/null 2>&1; then
+                  docker tag "$PREVIOUS_API_IMAGE_ID" "$PREVIOUS_API_IMAGE"
+                fi
+
+                IMAGE="$PREVIOUS_API_IMAGE"
+                IMAGE_TAG="${PREVIOUS_API_IMAGE##*:}"
+                export IMAGE IMAGE_TAG
+
+                # If a previous frontend existed, restore both services.
+                if [ -n "$PREVIOUS_FRONTEND_IMAGE" ]; then
+
+                  if ! docker image inspect "$PREVIOUS_FRONTEND_IMAGE" >/dev/null 2>&1; then
+                    docker tag "$PREVIOUS_FRONTEND_IMAGE_ID" "$PREVIOUS_FRONTEND_IMAGE"
+                  fi
+
+                  FRONTEND_IMAGE="$PREVIOUS_FRONTEND_IMAGE"
+                  FRONTEND_IMAGE_TAG="${PREVIOUS_FRONTEND_IMAGE##*:}"
+                  export FRONTEND_IMAGE FRONTEND_IMAGE_TAG
+
+                  echo "Restoring previous API and frontend images..."
+
+                  docker compose -f "$COMPOSE_FILE" \
+                    up -d --no-build --force-recreate || return 1
+
+                  wait_for_all_health || return 1
+
+                else
+                  # First frontend deployment: restore API only.
+                  echo "First frontend deployment rollback."
+                  echo "Restoring previous API and removing new frontend..."
+
+                  docker compose -f "$COMPOSE_FILE" \
+                    up -d --no-build --no-deps --force-recreate trading-api || return 1
+
+                  docker rm -f trading-frontend || true
+
+                  wait_for_api_health || return 1
+                fi
+
+                echo "Previous production version restored."
+                return 0
+              fi
+
+              # No previous API container was available.
+              echo "No previous API version available."
+
+              docker rm -f trading-frontend || true
+
+              docker rm -f trading-api || true
+
+              return 0
+            }
+
+            # 7. Deploy both applications.
+
+            echo "Starting API and frontend using Docker Compose..."
 
             if ! docker compose -f "$COMPOSE_FILE" \
               up -d --no-build --force-recreate; then
 
               echo "ERROR: Docker Compose deployment failed."
 
-              if [ -n "$BACKUP_CONTAINER" ]; then
-
-                echo "Restoring original Docker Run container..."
-
-                docker rm -f trading-api || true
-
-                docker rename "$BACKUP_CONTAINER" trading-api
-                docker start trading-api
-
-                if ! wait_for_health; then
-                  docker logs --tail 100 trading-api || true
-                  exit 1
-                fi
-
-              elif [ -n "$PREVIOUS_IMAGE" ]; then
-
-                PREVIOUS_TAG="${PREVIOUS_IMAGE##*:}"
-
-                echo "Restoring previous Compose image: $PREVIOUS_IMAGE"
-
-                IMAGE="$PREVIOUS_IMAGE"
-                IMAGE_TAG="$PREVIOUS_TAG"
-                export IMAGE IMAGE_TAG
-
-                if docker compose -f "$COMPOSE_FILE" \
-                  up -d --no-build --force-recreate; then
-
-                  echo "Checking rollback health..."
-
-                  ROLLBACK_HEALTHY=0
-                  ATTEMPT=1
-
-                  while [ "$ATTEMPT" -le 30 ]; do
-
-                    if curl --silent --show-error --fail \
-                      http://127.0.0.1:8000/health >/dev/null; then
-
-                      ROLLBACK_HEALTHY=1
-                      break
-                    fi
-
-                    echo "Waiting for rollback... ($ATTEMPT/30)"
-                    sleep 5
-                    ATTEMPT=$((ATTEMPT + 1))
-
-                  done
-
-                  if [ "$ROLLBACK_HEALTHY" -ne 1 ]; then
-                    echo "CRITICAL: Previous version rollback failed health check."
-                    docker logs --tail 100 trading-api || true
-                    exit 1
-                  fi
-
-                  echo "Previous version restored successfully."
-
-                else
-
-                  echo "CRITICAL: Could not restore previous version."
-                  exit 1
-
-                fi
-
+              if ! rollback_deployment; then
+                echo "CRITICAL: Rollback failed."
+                docker logs --tail 100 trading-api || true
+                docker logs --tail 100 trading-frontend || true
+                exit 1
               fi
 
+              echo "Deployment failed. Previous state restored."
               exit 1
             fi
 
-            # 7. Verify application health.
+            # 8. Verify health of both applications.
 
-            echo "Waiting for application to become healthy..."
+            echo "Waiting for both applications to become healthy..."
 
-            HEALTHY=0
-            ATTEMPT=1
-
-            while [ "$ATTEMPT" -le 30 ]; do
-
-              if curl --silent --show-error --fail \
-                http://127.0.0.1:8000/health >/dev/null; then
-
-                HEALTHY=1
-                break
-              fi
-
-              echo "Waiting... ($ATTEMPT/30)"
-              sleep 5
-
-              ATTEMPT=$((ATTEMPT + 1))
-
-            done
-
-            # 8. Automatically roll back if health check fails.
-
-            if [ "$HEALTHY" -ne 1 ]; then
-
-              echo "ERROR: New deployment failed health check."
+            if ! wait_for_all_health; then
+              echo "ERROR: One or more applications failed health checks."
 
               docker logs --tail 100 trading-api || true
+              docker logs --tail 100 trading-frontend || true
 
-              if [ -n "$BACKUP_CONTAINER" ]; then
-
-                echo "Restoring original Docker Run container..."
-
-                docker rm -f trading-api || true
-
-                docker rename "$BACKUP_CONTAINER" trading-api
-                docker start trading-api
-                if ! wait_for_health; then
-                  docker logs --tail 100 trading-api || true
-                  exit 1
-                fi
-
-              elif [ -n "$PREVIOUS_IMAGE" ]; then
-
-                PREVIOUS_TAG="${PREVIOUS_IMAGE##*:}"
-
-                echo "Rolling back to previous Compose image: $PREVIOUS_IMAGE"
-
-                IMAGE="$PREVIOUS_IMAGE"
-                IMAGE_TAG="$PREVIOUS_TAG"
-                export IMAGE IMAGE_TAG
-
-                docker compose -f "$COMPOSE_FILE" \
-                  up -d --no-build --force-recreate
-
-                echo "Waiting for rollback health check..."
-
-                ROLLBACK_HEALTHY=0
-                ATTEMPT=1
-
-                while [ "$ATTEMPT" -le 30 ]; do
-
-                  if curl --silent --show-error --fail \
-                    http://127.0.0.1:8000/health >/dev/null; then
-
-                    ROLLBACK_HEALTHY=1
-                    break
-                  fi
-
-                  sleep 5
-                  ATTEMPT=$((ATTEMPT + 1))
-
-                done
-
-                if [ "$ROLLBACK_HEALTHY" -ne 1 ]; then
-                  echo "CRITICAL: Rollback health check failed."
-                  docker logs --tail 100 trading-api || true
-                  exit 1
-                fi
-
-              else
-
-                echo "No previous production version available."
-                docker rm -f trading-api || true
-
+              if ! rollback_deployment; then
+                echo "CRITICAL: Rollback failed."
+                docker logs --tail 100 trading-api || true
+                docker logs --tail 100 trading-frontend || true
+                exit 1
               fi
 
-              echo "Deployment failed. Rollback attempted."
+              echo "Deployment failed. Previous state restored."
               exit 1
-
             fi
 
-            echo "New application is healthy."
+            echo "Both applications are healthy."
 
-            # 9. Remove the old container after successful first migration.
+            # 9. Remove the old Docker Run container after successful migration.
 
             if [ -n "$BACKUP_CONTAINER" ]; then
-
               echo "Removing previous Docker Run container..."
 
-              docker rm "$BACKUP_CONTAINER"
-
+              docker rm "$BACKUP_CONTAINER" || \
+                echo "WARNING: Could not remove previous backup container."
             fi
 
-            # 10. Retain current and previous production images.
+            # 10. Retain current and previous images for both repositories.
 
-            if [ -n "$PREVIOUS_IMAGE_ID" ]; then
+            cleanup_repo_images() {
+              REPOSITORY="$1"
+              CURRENT_ID="$2"
+              PREVIOUS_ID="$3"
 
-              echo "Cleaning obsolete Docker images..."
+              echo "Cleaning obsolete images from $REPOSITORY..."
 
-              docker image ls --no-trunc -q "$IMAGE_REPO" | sort -u |
+              docker image ls --no-trunc -q "$REPOSITORY" | sort -u |
               while IFS= read -r IMAGE_ID; do
 
-                if [ "$IMAGE_ID" != "$NEW_IMAGE_ID" ] &&
-                   [ "$IMAGE_ID" != "$PREVIOUS_IMAGE_ID" ]; then
+                if [ -n "$IMAGE_ID" ] &&
+                   [ "$IMAGE_ID" != "$CURRENT_ID" ] &&
+                   [ "$IMAGE_ID" != "$PREVIOUS_ID" ]; then
 
                   echo "Removing obsolete image: $IMAGE_ID"
                   docker rmi "$IMAGE_ID" || echo "WARNING: Could not remove $IMAGE_ID"
-
                 fi
 
               done
+            }
 
-            else
+            cleanup_repo_images \
+              "$API_REPO" \
+              "$NEW_API_IMAGE_ID" \
+              "$PREVIOUS_API_IMAGE_ID"
 
-              echo "No previous image identified. Skipping image cleanup."
-
-            fi
+            cleanup_repo_images \
+              "$FRONTEND_REPO" \
+              "$NEW_FRONTEND_IMAGE_ID" \
+              "$PREVIOUS_FRONTEND_IMAGE_ID"
 
             echo "======================================"
             echo "Deployment completed successfully."
-            echo "Current image: $IMAGE"
+            echo "API image: $IMAGE"
+            echo "Frontend image: $FRONTEND_IMAGE"
             echo "======================================"

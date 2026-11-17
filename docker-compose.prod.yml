@@ -2,7 +2,6 @@ services:
   trading-api:
     image: ${IMAGE:?IMAGE variable is required}
     container_name: trading-api
-
     restart: unless-stopped
 
     ports:
@@ -17,6 +16,27 @@ services:
     volumes:
       - /home/ubuntu/trading-api-data/chroma_db:/app/chroma_db
       - /home/ubuntu/trading-api-data/research_history.db:/app/research_history.db
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  trading-frontend:
+    image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE variable is required}
+    container_name: trading-frontend
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:8501:8501"
+
+    environment:
+      API_BASE_URL: http://trading-api:8000
+      APP_VERSION: ${FRONTEND_IMAGE_TAG:?FRONTEND_IMAGE_TAG variable is required}
+
+    depends_on:
+      - trading-api
 
     logging:
       driver: json-file
