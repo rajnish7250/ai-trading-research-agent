@@ -134,6 +134,61 @@ wait_for_all_health() {
   wait_for_api_health && wait_for_frontend_health
 }
 
+EXPECTED_COMPOSE_PROJECT="$(basename "$APP_DIR")"
+
+is_expected_compose_container() {
+  local container="$1"
+  local expected_service="$2"
+  local actual_project
+  local actual_service
+
+  if ! docker inspect "$container" >/dev/null 2>&1; then
+    echo "Container $container does not exist."
+    return 1
+  fi
+
+  actual_project="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$container")"
+  actual_service="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.service" }}' "$container")"
+
+  [[ "$actual_project" == "$EXPECTED_COMPOSE_PROJECT" &&
+     "$actual_service" == "$expected_service" ]]
+}
+
+assert_container_is_expected_or_absent() {
+  local container="$1"
+  local expected_service="$2"
+
+  if ! docker inspect "$container" >/dev/null 2>&1; then
+    echo "Container $container is absent. Nothing to validate."
+    return 0
+  fi
+
+  if ! is_expected_compose_container "$container" "$expected_service"; then
+    echo "CRITICAL: Container $container does not belong to the expected Compose project/service." >&2
+    return 1
+  fi
+
+  echo "Verified container identity: $container ($expected_service)"
+}
+
+remove_expected_compose_container() {
+  local container="$1"
+  local expected_service="$2"
+
+  if ! docker inspect "$container" >/dev/null 2>&1; then
+    echo "Container $container is already absent."
+    return 0
+  fi
+
+  if ! is_expected_compose_container "$container" "$expected_service"; then
+    echo "CRITICAL: Refusing to remove unverified container: $container" >&2
+    return 1
+  fi
+
+  echo "Removing verified Compose container: $container"
+  docker rm -f "$container"
+}
+
 # 5. Capture the currently running versions.
 OLD_CONTAINER=""
 PREVIOUS_API_IMAGE=""
@@ -209,10 +264,16 @@ restore_predeployment_migration() {
 predeployment_exit_handler() {
   local exit_status="$?"
   trap - EXIT
+
   if [[ "$PREDEPLOY_MIGRATION_ACTIVE" -eq 1 ]]; then
     echo "Unexpected exit during migration preparation (status ${exit_status})."
-    restore_predeployment_migration || true
+
+    if ! restore_predeployment_migration; then
+      echo "CRITICAL: Pre-deployment recovery failed. Manual inspection is required." >&2
+      exit 1
+    fi
   fi
+
   exit "$exit_status"
 }
 
@@ -259,8 +320,15 @@ rollback_deployment() {
 
   if [[ -n "$BACKUP_CONTAINER" ]]; then
     echo "Restoring original Docker Run API container..."
-    docker rm -f trading-frontend || true
-    docker rm -f trading-api || true
+
+    # Validate both containers before removing either one.
+    assert_container_is_expected_or_absent trading-frontend trading-frontend || return 1
+    assert_container_is_expected_or_absent trading-api trading-api || return 1
+
+    # Remove only containers belonging to our expected Compose project.
+    remove_expected_compose_container trading-frontend trading-frontend || return 1
+    remove_expected_compose_container trading-api trading-api || return 1
+
     docker rename "$BACKUP_CONTAINER" trading-api || return 1
     docker start trading-api || return 1
     wait_for_api_health || return 1
