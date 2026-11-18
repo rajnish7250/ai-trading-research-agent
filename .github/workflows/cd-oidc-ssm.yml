@@ -100,7 +100,7 @@ jobs:
           set -Eeuo pipefail
 
           SSM_SCRIPT="$(cat <<EOF
-          set -Eeuo pipefail
+          set -eu
 
           DEPLOYMENT_SHA="${DEPLOYMENT_SHA}"
           S3_BUCKET="${S3_BUCKET}"
