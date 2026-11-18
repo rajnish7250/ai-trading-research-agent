@@ -1,9 +1,15 @@
 name: Continuous Deployment - OIDC S3 SSM
 
 on:
-  # Initial rollout is manual-only. Automatic CI-triggered deployment
-  # will be enabled after the first controlled deployment is validated.
   workflow_dispatch:
+
+  workflow_run:
+    workflows:
+      - Continuous Integration
+    types:
+      - completed
+    branches:
+      - master
 
 # Prevent overlapping production deployments.
 concurrency:
@@ -16,7 +22,7 @@ permissions:
 
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/master'
+    if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master') || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master')
 
     runs-on: ubuntu-latest
     timeout-minutes: 50
@@ -26,14 +32,14 @@ jobs:
       AWS_ROLE_ARN: ${{ vars.AWS_DEPLOYMENT_ROLE_ARN }}
       S3_BUCKET: ai-trading-deployment-artifacts-109389764805
       EC2_INSTANCE_ID: i-001e936cdfb386054
-      DEPLOYMENT_SHA: ${{ github.sha }}
+      DEPLOYMENT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
     steps:
       # 1. Check out the exact commit that CI built.
       - name: Checkout deployment commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       # 2. Validate the deployment inputs before uploading anything.
       - name: Validate deployment artifacts
