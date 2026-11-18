@@ -1,0 +1,37 @@
+
+name: AWS S3 Upload Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test-s3-upload:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS Credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOYMENT_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Create test artifact
+        run: |
+          echo "AI Trading Research Agent S3 upload test" > test-artifact.txt
+
+      - name: Upload artifact to S3
+        run: |
+          aws s3 cp test-artifact.txt \
+            s3://ai-trading-deployment-artifacts-109389764805/oidc-test/test-artifact.txt
+
+      - name: Verify uploaded artifact
+        run: |
+          aws s3api head-object \
+            --bucket ai-trading-deployment-artifacts-109389764805 \
+            --key oidc-test/test-artifact.txt
+
+          echo "S3 upload verification successful."
