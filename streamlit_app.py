@@ -12,7 +12,12 @@ import requests
 import streamlit as st
 
 from ui_theme import apply_theme
-
+from auth_ui import (
+    validate_registration,
+    register_account,
+    verify_account,
+    resend_verification,
+)
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 REQUEST_TIMEOUT = 180
@@ -42,6 +47,8 @@ def clear_user_session():
     st.session_state.selected_report = None
     st.session_state.last_result = None
     st.session_state.last_query = ""
+    st.session_state.auth_view = "login"
+    st.session_state.pending_verify_token = None
 
 
 def expire_session():
@@ -262,10 +269,158 @@ for name, default in {
     "last_result": None,
     "last_query": "",
     "flash_message": None,
+    "auth_view": "login",
+    "pending_verify_token": None,
 }.items():
     if name not in st.session_state:
         st.session_state[name] = default
 
+
+def auth_request_error(exc):
+    """Display safe, friendly authentication errors."""
+    if isinstance(exc, requests.Timeout):
+        st.error("The request timed out. Please try again.")
+    elif isinstance(exc, requests.ConnectionError):
+        st.error("Cannot connect to FastAPI. Check that it is running.")
+    elif isinstance(exc, requests.HTTPError):
+        code = status_code_from(exc)
+        if code == 429:
+            st.warning("Too many requests. Please wait before trying again.")
+        elif code == 400:
+            st.error("The request could not be completed. Check your details or verification link.")
+        elif code == 422:
+            st.error("Please check the information you entered.")
+        elif code and code >= 500:
+            st.error("The authentication service is temporarily unavailable.")
+        else:
+            st.error("The request could not be completed.")
+    else:
+        st.error("Something went wrong. Please try again.")
+
+
+def show_registration():
+    st.subheader("Create your account")
+    st.caption("Register to access your AI research workspace.")
+
+    with st.form("registration_form"):
+        full_name = st.text_input("Full name")
+        email = st.text_input("Email address")
+        password = st.text_input("Password", type="password")
+        confirm_password = st.text_input(
+            "Confirm password", type="password"
+        )
+        submitted = st.form_submit_button(
+            "Create account", type="primary", use_container_width=True
+        )
+
+    if submitted:
+        error = validate_registration(
+            full_name, email, password, confirm_password
+        )
+        if error:
+            st.warning(error)
+        else:
+            try:
+                message = register_account(
+                    API_BASE_URL, full_name, email, password
+                )
+                st.success(message)
+                st.info(
+                    "Check your inbox and spam folder. "
+                    "If no email arrives, use Resend verification."
+                )
+            except requests.RequestException as exc:
+                auth_request_error(exc)
+
+    if st.button("Already have an account? Sign in"):
+        st.session_state.auth_view = "login"
+        st.rerun()
+
+    if st.button("Resend verification email"):
+        st.session_state.auth_view = "resend"
+        st.rerun()
+
+
+def show_resend_verification():
+    st.subheader("Resend verification email")
+    st.caption("Enter the email address used during registration.")
+
+    with st.form("resend_form"):
+        email = st.text_input("Email address")
+        submitted = st.form_submit_button(
+            "Request verification email",
+            type="primary",
+            use_container_width=True,
+        )
+
+    if submitted:
+        email = email.strip().lower()
+        if len(email) > 254 or not re.fullmatch(
+            r"[^@\s]+@[^@\s]+\.[^@\s]+", email
+        ):
+            st.warning("Enter a valid email address.")
+        else:
+            try:
+                message = resend_verification(API_BASE_URL, email)
+                st.success(message)
+            except requests.RequestException as exc:
+                auth_request_error(exc)
+
+    if st.button("Back to login"):
+        st.session_state.auth_view = "login"
+        st.rerun()
+
+
+def show_verification():
+    st.subheader("Verify your email")
+    st.caption("Confirm your email address to activate your account.")
+
+    token = st.session_state.pending_verify_token
+
+    if not token:
+        st.warning("No verification link was provided.")
+    elif st.button(
+        "Verify my email", type="primary", use_container_width=True
+    ):
+        # Remove the token from session state before the API request.
+        st.session_state.pending_verify_token = None
+        try:
+            message = verify_account(API_BASE_URL, token)
+            st.success(message)
+            st.info("Your email is verified. You can now sign in.")
+        except requests.RequestException as exc:
+            auth_request_error(exc)
+            st.info(
+                "If verification did not complete, request a new "
+                "verification email."
+            )
+        finally:
+            del token
+
+    if st.button("Go to login"):
+        st.session_state.pending_verify_token = None
+        st.session_state.auth_view = "login"
+        st.rerun()
+
+    if st.button("Request another verification email"):
+        st.session_state.pending_verify_token = None
+        st.session_state.auth_view = "resend"
+        st.rerun()
+
+# Capture verification tokens and clear the URL immediately.
+if "verify_token" in st.query_params:
+    raw_token = st.query_params.get("verify_token", "")
+    st.query_params.clear()
+
+    if (
+        not st.session_state.token
+        and isinstance(raw_token, str)
+        and 0 < len(raw_token) <= 256
+    ):
+        st.session_state.pending_verify_token = raw_token
+        st.session_state.auth_view = "verify"
+    else:
+        st.session_state.pending_verify_token = None
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Login — polished design, same POST /login contract.
@@ -304,41 +459,76 @@ if not st.session_state.token:
             unsafe_allow_html=True,
         )
 
+
     with sign_in:
-        st.markdown(
-            '''<div class="tr-auth-heading">
-              <div class="tr-section-label">MEMBER ACCESS</div>
-              <h2>Welcome back</h2>
-              <p>Sign in to open your research workspace.</p>
-            </div>''',
-            unsafe_allow_html=True,
-        )
-        with st.form("login_form"):
-            email = st.text_input("Email address", placeholder="you@example.com")
-            password = st.text_input("Password", type="password", placeholder="Enter your password")
-            submitted = st.form_submit_button(
-                "Sign in to workspace  →", type="primary", use_container_width=True,
+        if st.session_state.auth_view == "register":
+            show_registration()
+
+        elif st.session_state.auth_view == "resend":
+            show_resend_verification()
+
+        elif st.session_state.auth_view == "verify":
+            show_verification()
+
+        else:
+            st.markdown(
+                '''<div class="tr-auth-heading">
+                  <div class="tr-section-label">MEMBER ACCESS</div>
+                  <h2>Welcome back</h2>
+                  <p>Sign in to open your research workspace.</p>
+                </div>''',
+                unsafe_allow_html=True,
             )
 
-        if st.session_state.flash_message:
-            st.warning(st.session_state.flash_message)
-            st.session_state.flash_message = None
+            with st.form("login_form"):
+                email = st.text_input(
+                    "Email address",
+                    placeholder="you@example.com",
+                )
+                password = st.text_input(
+                    "Password",
+                    type="password",
+                    placeholder="Enter your password",
+                )
+                submitted = st.form_submit_button(
+                    "Sign in to workspace",
+                    type="primary",
+                    use_container_width=True,
+                )
 
-        if submitted:
-            if not email.strip() or not password:
-                st.warning("Enter both your email and password.")
-            else:
-                try:
-                    if login(email.strip(), password):
-                        st.rerun()
-                except requests.HTTPError as exc:
-                    display_login_error(exc)
-                except requests.Timeout:
-                    st.error("Login request timed out. Please try again.")
-                except requests.ConnectionError:
-                    st.error("Cannot connect to the API. Check whether FastAPI is running.")
-                except requests.RequestException:
-                    st.error("An unexpected error occurred during login.")
+            if st.session_state.flash_message:
+                st.warning(st.session_state.flash_message)
+                st.session_state.flash_message = None
+
+            if submitted:
+                if not email.strip() or not password:
+                    st.warning("Enter both your email and password.")
+                else:
+                    try:
+                        if login(email.strip(), password):
+                            st.rerun()
+                    except requests.HTTPError as exc:
+                        display_login_error(exc)
+                    except requests.Timeout:
+                        st.error("Login request timed out.")
+                    except requests.ConnectionError:
+                        st.error("Cannot connect to FastAPI.")
+                    except requests.RequestException:
+                        st.error("An unexpected login error occurred.")
+
+            if st.button(
+                "Create a new account",
+                use_container_width=True,
+            ):
+                st.session_state.auth_view = "register"
+                st.rerun()
+
+            if st.button(
+                "Resend verification email",
+                use_container_width=True,
+            ):
+                st.session_state.auth_view = "resend"
+                st.rerun()
 
     st.stop()
 

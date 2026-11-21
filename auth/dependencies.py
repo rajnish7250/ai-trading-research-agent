@@ -1,3 +1,4 @@
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
@@ -26,12 +27,18 @@ def get_current_user(
 
     email = payload.get("sub")
 
-    if email is None:
+    if not isinstance(email, str) or not email:
         raise credentials_exception
 
     user = get_user(email)
 
     if user is None:
+        raise credentials_exception
+
+    if user.get("disabled", False):
+        raise credentials_exception
+
+    if user.get("is_verified", True) is False:
         raise credentials_exception
 
     return user
