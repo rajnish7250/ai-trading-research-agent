@@ -2,10 +2,14 @@ import unittest
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from main import app
+from main import app, limiter
 
 
 class ResendVerificationSecurityTest(unittest.TestCase):
+
+    def setUp(self):
+        """Start each test with fresh rate-limit counters."""
+        limiter._storage.reset()
 
     @patch("main.request_verification_resend")
     def test_validation_privacy_and_rate_limit(
