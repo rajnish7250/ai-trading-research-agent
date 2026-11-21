@@ -5,11 +5,15 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from main import app
+from main import app, limiter
 from auth.user_repository import get_user_by_email
 
 
 class RegistrationIntegrationTest(unittest.TestCase):
+
+    def setUp(self):
+        """Clear rate-limit counters before this integration test."""
+        limiter._storage.reset()
 
     def test_complete_registration_journey(self):
 
