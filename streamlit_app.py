@@ -1,211 +1,392 @@
+"""AI Trading Research Agent — polished Streamlit frontend.
+
+UI-only redesign. Preserves the existing FastAPI login, research and history APIs.
+The registration/email-verification feature is intentionally NOT included here.
+"""
 
 import os
+import re
+from html import escape
 
 import requests
 import streamlit as st
 
+from ui_theme import apply_theme
 
-API_BASE_URL = os.getenv(
-    "API_BASE_URL",
-    "http://127.0.0.1:8000",
-).rstrip("/")
 
+API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 REQUEST_TIMEOUT = 180
 
 st.set_page_config(
-    page_title="AI Trading Research Agent",
-    page_icon="ðŸ“ˆ",
+    page_title="AI Trading Research Agent | Market Intelligence",
+    page_icon="📈",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
+apply_theme()
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API and session helpers — same endpoints and request formats as before.
+# ─────────────────────────────────────────────────────────────────────────────
 
 def api_headers():
-    return {
-        "Authorization": f"Bearer {st.session_state.token}"
-    }
+    return {"Authorization": f"Bearer {st.session_state.token}"}
 
-def expire_session():
-    """Clear authentication state when the JWT expires."""
+
+def clear_user_session():
     st.session_state.token = None
     st.session_state.email = None
     st.session_state.history = []
     st.session_state.history_loaded = False
     st.session_state.selected_report = None
+    st.session_state.last_result = None
+    st.session_state.last_query = ""
 
-    st.error("Your session has expired. Please log in again.")
+
+def expire_session():
+    """Clear authentication state when the JWT expires."""
+    clear_user_session()
+    st.session_state.flash_message = "Your session expired. Please sign in again."
     st.rerun()
 
 
 def load_history():
-    """Load saved research belonging to the authenticated user."""
+    """Fetch saved reports for the signed-in user."""
     response = requests.get(
         f"{API_BASE_URL}/research/history",
         headers=api_headers(),
         params={"limit": 50},
         timeout=15,
     )
-
     if response.status_code == 401:
         expire_session()
-
     response.raise_for_status()
     st.session_state.history = response.json()
     st.session_state.history_loaded = True
 
 
 def login(email, password):
-    """Authenticate against FastAPI and store the returned JWT."""
+    """Authenticate against FastAPI and save its access token."""
     response = requests.post(
         f"{API_BASE_URL}/login",
         data={"username": email, "password": password},
         timeout=15,
     )
-
     if response.status_code == 401:
         st.error("Invalid email or password.")
         return False
-
     response.raise_for_status()
     st.session_state.token = response.json()["access_token"]
     st.session_state.email = email
     st.session_state.history = []
     st.session_state.history_loaded = False
+    st.session_state.selected_report = None
+    st.session_state.last_result = None
+    st.session_state.last_query = ""
     return True
 
 
 def logout():
-    st.session_state.token = None
-    st.session_state.email = None
-    st.session_state.history = []
-    st.session_state.history_loaded = False
-    st.session_state.selected_report = None
+    clear_user_session()
     st.rerun()
 
 
-# Initialize session state.
-if "token" not in st.session_state:
-    st.session_state.token = None
-
-if "email" not in st.session_state:
-    st.session_state.email = None
-
-if "history" not in st.session_state:
-    st.session_state.history = []
-
-if "selected_report" not in st.session_state:
-    st.session_state.selected_report = None
-
-if "history_loaded" not in st.session_state:
-    st.session_state.history_loaded = False
+def status_code_from(exc):
+    return exc.response.status_code if exc.response is not None else None
 
 
-st.title("ðŸ“ˆ AI Trading Research Agent")
-st.caption(
-    "Multi-agent market research powered by LangGraph, "
-    "RAG, market data, news, sentiment and risk analysis."
-)
+def display_login_error(exc):
+    code = status_code_from(exc)
+    if code == 403:
+        st.error("Access denied. Please contact the administrator.")
+    elif code == 422:
+        st.error("Invalid login request. Please check your input.")
+    elif code == 429:
+        st.error("Too many login attempts. Please wait and try again.")
+    elif code and code >= 500:
+        st.error("Login service is temporarily unavailable.")
+    else:
+        st.error(f"Login failed. HTTP {code or 'unknown'}.")
 
 
-# Login screen.
+def display_research_error(exc):
+    code = status_code_from(exc)
+    if code == 401:
+        expire_session()
+    elif code == 403:
+        st.error("You don't have permission to perform this action.")
+    elif code == 422:
+        st.error("The research request contains invalid data. Please check your input.")
+    elif code == 429:
+        st.error("API rate limit reached. Please wait before trying again.")
+    elif code and code >= 500:
+        st.error("The server encountered an error. Please try again later.")
+    else:
+        st.error(f"API request failed. HTTP status: {code or 'unknown'}.")
+
+
+def display_history_error(exc):
+    code = status_code_from(exc)
+    if code == 401:
+        expire_session()
+    elif code == 403:
+        st.error("You don't have permission to view this history.")
+    elif code and code >= 500:
+        st.error("Server error while loading history. Try again later.")
+    else:
+        st.error(f"Could not load history. HTTP {code or 'unknown'}.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# UI helpers — only presentation, no changes to research data or APIs.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def pretty_label(value):
+    """Convert API keys such as 'market_sentiment' into friendly labels."""
+    label = str(value).replace("_", " ").replace("-", " ").strip()
+    return re.sub(r"\s+", " ", label).title() or "Detail"
+
+
+def render_detail(value, depth=0):
+    """Present unpredictable nested agent output without hiding its content."""
+    if value is None:
+        st.caption("No data returned for this section.")
+    elif isinstance(value, dict):
+        if not value:
+            st.caption("No data returned for this section.")
+            return
+        if depth >= 3:
+            st.json(value)
+            return
+        for key, child in value.items():
+            label = pretty_label(key)
+            if isinstance(child, (dict, list)):
+                st.markdown(f"**{label}**")
+                render_detail(child, depth + 1)
+            else:
+                left, right = st.columns([1, 2.3])
+                with left:
+                    st.caption(label)
+                with right:
+                    if child is None or child == "":
+                        st.caption("Not available")
+                    else:
+                        st.write(child)
+    elif isinstance(value, list):
+        if not value:
+            st.caption("No items returned.")
+            return
+        for index, item in enumerate(value[:12], 1):
+            if isinstance(item, dict):
+                title = item.get("title") or item.get("headline") or item.get("name")
+                if title is not None:
+                    st.markdown(f"**{index}. {escape(str(title))}**")
+                    remaining = {key: val for key, val in item.items()
+                                 if key not in ("title", "headline", "name")}
+                    render_detail(remaining, depth + 1)
+                else:
+                    st.markdown(f"**Item {index}**")
+                    render_detail(item, depth + 1)
+            else:
+                st.write(item)
+            if index < min(len(value), 12):
+                st.divider()
+        if len(value) > 12:
+            with st.expander(f"View {len(value) - 12} more items"):
+                st.json(value[12:])
+    elif isinstance(value, str):
+        st.write(value)
+    else:
+        st.write(value)
+
+
+def render_report(result, heading="Research intelligence"):
+    """Render new and saved reports in the same readable interface."""
+    st.markdown('<div class="tr-section-label">YOUR ANALYSIS</div>', unsafe_allow_html=True)
+    st.markdown(f"### {heading}")
+
+    if not isinstance(result, dict):
+        render_detail(result)
+        return
+
+    sections = [
+        ("report", "📋 Report"),
+        ("price", "📈 Price"),
+        ("news", "📰 News"),
+        ("sentiment", "🧠 Sentiment"),
+        ("risk", "🛡️ Risk"),
+    ]
+    present = [(key, label) for key, label in sections if key in result]
+    extra = {key: val for key, val in result.items() if key not in dict(sections)}
+
+    if not present and not extra:
+        st.info("The research service returned an empty report.")
+        return
+
+    tab_labels = [label for _, label in present]
+    if extra:
+        tab_labels.append("🔎 Other data")
+    tab_labels.append("{} Raw JSON".format("🗂️"))
+
+    tabs = st.tabs(tab_labels)
+    for index, (key, _) in enumerate(present):
+        with tabs[index]:
+            st.markdown(f"#### {pretty_label(key)} analysis")
+            render_detail(result[key])
+    if extra:
+        with tabs[len(present)]:
+            render_detail(extra)
+    with tabs[-1]:
+        st.caption("Complete unmodified API response for transparency and debugging.")
+        st.json(result)
+
+
+def display_topbar():
+    st.markdown(
+        '<div class="tr-topbar">'
+        '<span class="tr-logo">◈</span>'
+        '<span class="tr-brand">AI TRADING <span class="tr-brand-accent">RESEARCH</span></span>'
+        '<span class="tr-topbar-tag">AI RESEARCH AGENT</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+
+for name, default in {
+    "token": None,
+    "email": None,
+    "history": [],
+    "history_loaded": False,
+    "selected_report": None,
+    "last_result": None,
+    "last_query": "",
+    "flash_message": None,
+}.items():
+    if name not in st.session_state:
+        st.session_state[name] = default
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Login — polished design, same POST /login contract.
+# ─────────────────────────────────────────────────────────────────────────────
 if not st.session_state.token:
-    st.subheader("Sign in")
+    display_topbar()
+    st.markdown('<div class="tr-login-spacer"></div>', unsafe_allow_html=True)
+    intro, sign_in = st.columns([1.12, 0.88], gap="large")
 
-    with st.form("login_form"):
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button(
-            "Login",
-            use_container_width=True,
+    with intro:
+        st.markdown(
+            '''<div class="tr-login-intro">
+              <div class="tr-pill"><span class="tr-pulse"></span> INTELLIGENCE, NOT NOISE</div>
+              <h1>Make smarter<br><span>market decisions.</span></h1>
+              <p>One workspace for multi-agent research, market signals,
+              news intelligence, sentiment and risk analysis.</p>
+              <div class="tr-login-features">
+                <div><span>01</span><strong>Multi-agent analysis</strong><small>Specialized research agents</small></div>
+                <div><span>02</span><strong>Market intelligence</strong><small>Price, news &amp; sentiment</small></div>
+                <div><span>03</span><strong>Research history</strong><small>Return to previous insights</small></div>
+              </div>
+              <div class="tr-stack-heading">
+  ENGINEERED WITH MODERN AI TECHNOLOGIES
+</div>
+<div class="tr-tech-stack">
+  <span>LangGraph</span>
+  <span>RAG</span>
+  <span>ChromaDB</span>
+  <span>FastAPI</span>
+  <span>Streamlit</span>
+  <span>Python</span>
+  <span>Docker</span>
+  <span>AWS</span>
+</div>
+            </div>''',
+            unsafe_allow_html=True,
         )
 
-    if submitted:
-        if not email.strip() or not password:
-            st.warning("Enter both your email and password.")
-        else:
-            try:
-                if login(email.strip(), password):
-                    st.rerun()
-            except requests.HTTPError as exc:
-                status_code = (
-                    exc.response.status_code
-                    if exc.response is not None
-                    else None
-                )
+    with sign_in:
+        st.markdown(
+            '''<div class="tr-auth-heading">
+              <div class="tr-section-label">MEMBER ACCESS</div>
+              <h2>Welcome back</h2>
+              <p>Sign in to open your research workspace.</p>
+            </div>''',
+            unsafe_allow_html=True,
+        )
+        with st.form("login_form"):
+            email = st.text_input("Email address", placeholder="you@example.com")
+            password = st.text_input("Password", type="password", placeholder="Enter your password")
+            submitted = st.form_submit_button(
+                "Sign in to workspace  →", type="primary", use_container_width=True,
+            )
 
-                if status_code == 403:
-                    st.error("Access denied. Please contact the administrator.")
-                elif status_code == 422:
-                    st.error("Invalid login request. Please check your input.")
-                elif status_code == 429:
-                    st.error("Too many login attempts. Please wait and try again.")
-                elif status_code and status_code >= 500:
-                    st.error("Login service is temporarily unavailable.")
-                else:
-                    st.error(f"Login failed. HTTP {status_code or 'unknown'}.")
+        if st.session_state.flash_message:
+            st.warning(st.session_state.flash_message)
+            st.session_state.flash_message = None
 
-            except requests.Timeout:
-                st.error("Login request timed out. Please try again.")
+        if submitted:
+            if not email.strip() or not password:
+                st.warning("Enter both your email and password.")
+            else:
+                try:
+                    if login(email.strip(), password):
+                        st.rerun()
+                except requests.HTTPError as exc:
+                    display_login_error(exc)
+                except requests.Timeout:
+                    st.error("Login request timed out. Please try again.")
+                except requests.ConnectionError:
+                    st.error("Cannot connect to the API. Check whether FastAPI is running.")
+                except requests.RequestException:
+                    st.error("An unexpected error occurred during login.")
 
-            except requests.ConnectionError:
-                st.error("Cannot connect to the API. Check whether FastAPI is running.")
-
-            except requests.RequestException:
-                st.error("An unexpected error occurred during login.")
-
-    st.info("Log in to research markets and access your saved reports.")
     st.stop()
 
 
-# Authenticated application.
-with st.sidebar:
-    st.subheader("Account")
-    st.write(st.session_state.email)
+# ─────────────────────────────────────────────────────────────────────────────
+# Logged-in workspace — sidebar, research, saved reports.
+# ─────────────────────────────────────────────────────────────────────────────
+if not st.session_state.history_loaded:
+    try:
+        load_history()
+    except requests.RequestException:
+        st.session_state.history_loaded = False
+        st.warning("Could not load saved reports from the API. You can retry from the sidebar.")
 
-    if st.button("Refresh history", use_container_width=True):
+with st.sidebar:
+    st.markdown(
+        '<div class="tr-side-brand"><span class="tr-logo">◈</span>'
+        '<span>AI TRADING <span class="tr-brand-accent">RESEARCH</span></span></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown('<div class="tr-section-label">WORKSPACE</div>', unsafe_allow_html=True)
+    if st.button("＋  New research", type="primary", use_container_width=True):
+        st.session_state.selected_report = None
+        st.session_state.last_result = None
+        st.session_state.last_query = ""
+        st.rerun()
+
+    st.markdown('<div class="tr-section-label tr-history-heading">SAVED RESEARCH</div>', unsafe_allow_html=True)
+    if st.button("↻  Refresh history", use_container_width=True):
         try:
             load_history()
-            st.success("Research history refreshed.")
             st.rerun()
-
         except requests.HTTPError as exc:
-            status_code = (
-                exc.response.status_code
-                if exc.response is not None
-                else None
-            )
-
-            if status_code == 401:
-                expire_session()
-            elif status_code == 403:
-                st.error("You don't have permission to view this history.")
-            elif status_code and status_code >= 500:
-                st.error("Server error while loading history. Try again later.")
-            else:
-                st.error(f"Could not load history. HTTP {status_code or 'unknown'}.")
-
+            display_history_error(exc)
         except requests.Timeout:
             st.error("History request timed out. Please try again.")
-
         except requests.RequestException:
             st.error("Cannot connect to the API.")
 
-    if st.button("Log out", use_container_width=True):
-        logout()
-
-    st.divider()
-    st.subheader("Saved research")
-
     history = st.session_state.history
-
     if not history:
         st.caption("No saved reports loaded yet.")
     else:
         for item in history:
-            label = (
-                f"{item['query'][:45]} "
-                f"Â· {item['created_at'][:10]}"
-            )
-
+            title = str(item.get("query") or "Untitled research").strip()
+            date = str(item.get("created_at") or "")[:10]
+            short_title = title[:38] + ("…" if len(title) > 38 else "")
+            label = f"{short_title}\n{date}" if date else short_title
             if st.button(
                 label,
                 key=f"history_{item['id']}",
@@ -214,54 +395,80 @@ with st.sidebar:
                 st.session_state.selected_report = item
                 st.rerun()
 
-
-# Load history after login or when the page session is restored.
-if not st.session_state.history_loaded:
-    try:
-        load_history()
-    except requests.RequestException:
-        st.warning("Could not load saved reports from the API.")
+    st.divider()
+    st.markdown('<div class="tr-section-label">SIGNED IN AS</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="tr-account"><span class="tr-avatar">●</span>'
+        f'<span>{escape(str(st.session_state.email or ""))}</span></div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("Log out  ↗", use_container_width=True):
+        logout()
 
 
 selected = st.session_state.selected_report
-
 if selected:
-    st.subheader("Saved research report")
-    st.caption(f"Query: {selected['query']}")
-
-    if st.button("Close saved report"):
-        st.session_state.selected_report = None
-        st.rerun()
-
-    st.json(selected["result"])
-    st.caption(f"Saved at: {selected['created_at']}")
+    st.markdown(
+        '''<div class="tr-hero">
+          <div class="tr-eyebrow">RESEARCH LIBRARY / SAVED REPORT</div>
+          <h1>Revisit your insights.</h1>
+          <p>Your previous market analysis, ready whenever you need it.</p>
+        </div>''',
+        unsafe_allow_html=True,
+    )
+    st.caption(f"Research question: {selected.get('query', 'Untitled research')}")
+    left, _ = st.columns([1, 4])
+    with left:
+        if st.button("←  Back to research", use_container_width=True):
+            st.session_state.selected_report = None
+            st.rerun()
+    render_report(selected.get("result"), "Saved research report")
+    st.caption(f"Saved at: {selected.get('created_at', 'Unknown date')}")
 
 else:
-    st.subheader("New market research")
+    st.markdown(
+        '''<div class="tr-hero">
+          <div class="tr-eyebrow"><span class="tr-pulse"></span> AI-POWERED MARKET INTELLIGENCE</div>
+          <h1>Your research. <span style="color:#45e2ca">Elevated.</span></h1>
+          <p>Explore the market through price data, news, sentiment and risk —
+          brought together by specialized AI agents.</p>
+        </div>''',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="tr-section-label">RESEARCH WORKSPACE</div>', unsafe_allow_html=True)
+    st.markdown("### What would you like to analyze?")
+    st.caption("Ask a detailed question about an asset, market trend, or investment risk.")
 
     with st.form("research_form"):
         query = st.text_area(
-            "Research query",
+            "Your research question",
             placeholder=(
-                "Example: Analyze BTC-USD market sentiment, "
-                "recent news and key risks."
+                "Example: Analyze BTC-USD market sentiment, recent news, "
+                "price movements and the key risks to watch."
             ),
-            height=100,
+            height=135,
+        )
+        submitted = st.form_submit_button(
+            "✦  Generate research report", type="primary", use_container_width=True,
         )
 
-        submitted = st.form_submit_button(
-            "Run research",
-            use_container_width=True,
-        )
+    st.markdown(
+        '''<div class="tr-feature-strip">
+          <div><span>📈</span><strong>Price intelligence</strong><small>Market context</small></div>
+          <div><span>📰</span><strong>News analysis</strong><small>Relevant developments</small></div>
+          <div><span>🧠</span><strong>Sentiment signals</strong><small>Market perspective</small></div>
+          <div><span>🛡️</span><strong>Risk assessment</strong><small>Key considerations</small></div>
+        </div>''',
+        unsafe_allow_html=True,
+    )
 
     if submitted:
         if not query.strip():
             st.warning("Enter a research question first.")
         else:
             try:
-                with st.spinner(
-                    "Researching market data, news, sentiment and risk..."
-                ):
+                with st.spinner("Research agents are analyzing market data, news, sentiment and risk..."):
                     response = requests.post(
                         f"{API_BASE_URL}/research",
                         headers=api_headers(),
@@ -270,70 +477,38 @@ else:
                     )
                     if response.status_code == 401:
                         expire_session()
-
                     response.raise_for_status()
                     result = response.json()
-
-                st.success("Research completed.")
-
-                st.subheader("Research results")
-
-                for section in (
-                    "price",
-                    "news",
-                    "sentiment",
-                    "risk",
-                    "report",
-                ):
-                    with st.expander(
-                        section.replace("_", " ").title(),
-                        expanded=(section == "report"),
-                    ):
-                        value = result.get(section)
-
-                        if isinstance(value, (dict, list)):
-                            st.json(value)
-                        elif value is not None:
-                            st.write(value)
-                        else:
-                            st.caption("No data returned.")
-
-                # Refresh saved reports from the backend.
-                load_history()
-
+                st.session_state.last_result = result
+                st.session_state.last_query = query.strip()
+                st.success("Research completed. Your report is ready below.")
+                try:
+                    load_history()
+                except requests.RequestException:
+                    st.warning("Report generated, but saved history could not be refreshed.")
             except requests.HTTPError as exc:
-                status_code = (
-                    exc.response.status_code
-                    if exc.response is not None
-                    else None
-                )
-                if status_code == 401:
-                    expire_session()
-
-                elif status_code == 403:
-                    st.error("You don't have permission to perform this action. ")
-                elif status_code == 422:
-                    st.error("The research request contains invalid data. Please check your input.")
-                elif status_code == 429:
-                    st.error("API rate limit reached. Please wait before trying again.")
-                elif status_code and status_code >= 500:
-                    st.error("The server encountered an error. Please try again later.")
-                else:
-                    st.error(f"API request failed. HTTP status: {status_code or 'unknown'}")
+                display_research_error(exc)
             except requests.Timeout:
                 st.error(
                     "The research request timed out. "
                     "Check whether the backend is still processing it."
                 )
-
             except requests.RequestException:
-                st.error(
-                    "Could not reach the API. "
-                    "Verify that FastAPI is running."
-                )
+                st.error("Could not reach the API. Verify that FastAPI is running.")
+
+    if st.session_state.last_result is not None:
+        st.divider()
+        st.caption(f"Research question: {st.session_state.last_query}")
+        render_report(st.session_state.last_result)
 
 
-st.divider()
-st.caption(
-    "Streamlit UI Â· FastAPI Â· LangGraph Â· RAG Â· ChromaDB Â· SQLite"
+st.markdown(
+    """
+    <div class="tr-footer">
+        <strong>AI TRADING RESEARCH AGENT</strong><br>
+        Built with Python · Streamlit · FastAPI · LangGraph · RAG · ChromaDB<br>
+        Deployed on AWS · Docker · GitHub Actions
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
