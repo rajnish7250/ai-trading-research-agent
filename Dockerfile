@@ -8,7 +8,7 @@ COPY requirements.frontend.txt .
 RUN pip install --no-cache-dir -r requirements.frontend.txt
 
 # Copy Streamlit application and its theme
-COPY streamlit_app.py ui_theme.py ./
+COPY streamlit_app.py ui_theme.py auth_ui.py ./
 
 EXPOSE 8501
 
