@@ -41,4 +41,9 @@ def get_current_user(
     if user.get("is_verified", True) is False:
         raise credentials_exception
 
+    if (payload.get("uid"), payload.get("sv")) != (
+        user.get("id"), user.get("session_version")
+    ):
+        raise credentials_exception
+
     return user

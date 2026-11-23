@@ -1,8 +1,4 @@
-"""AI Trading Research Agent — polished Streamlit frontend.
-
-UI-only redesign. Preserves the existing FastAPI login, research and history APIs.
-The registration/email-verification feature is intentionally NOT included here.
-"""
+"""Streamlit workspace for the AI Trading Research Agent."""
 
 import os
 import re
@@ -49,6 +45,8 @@ def clear_user_session():
     st.session_state.last_query = ""
     st.session_state.auth_view = "login"
     st.session_state.pending_verify_token = None
+    st.session_state.pending_reset_token = None
+    st.session_state.show_settings = False
 
 
 def expire_session():
@@ -271,6 +269,8 @@ for name, default in {
     "flash_message": None,
     "auth_view": "login",
     "pending_verify_token": None,
+    "pending_reset_token": None,
+    "show_settings": False,
 }.items():
     if name not in st.session_state:
         st.session_state[name] = default
@@ -407,6 +407,126 @@ def show_verification():
         st.session_state.auth_view = "resend"
         st.rerun()
 
+def show_password_reset():
+    token = st.session_state.pending_reset_token
+    st.subheader("Choose a new password" if token else "Forgot password")
+    with st.form("password_reset", clear_on_submit=True):
+        if token:
+            password = st.text_input("New password", type="password", help="Use at least 12 characters.")
+            confirm = st.text_input("Confirm new password", type="password")
+        else:
+            email = st.text_input("Account email address", max_chars=254)
+        submitted = st.form_submit_button(
+            "Reset password" if token else "Send reset link", type="primary"
+        )
+
+    if submitted:
+        if token and (len(password) < 12 or len(password.encode("utf-8")) > 72):
+            st.warning("Use at least 12 characters and at most 72 bytes.")
+        elif token and password != confirm:
+            st.warning("The passwords must match.")
+        elif not token and len(email.strip()) < 3:
+            st.warning("Enter your account email address.")
+        else:
+            try:
+                response = requests.post(
+                    f"{API_BASE_URL}/{'reset-password' if token else 'forgot-password'}",
+                    json={"token": token, "password": password} if token else {"email": email.strip()},
+                    timeout=15,
+                )
+                if token and response.status_code == 400:
+                    st.error("This reset link is invalid or expired. Request a new link below.")
+                else:
+                    response.raise_for_status()
+                    if token:
+                        clear_user_session()
+                        st.session_state.flash_message = response.json()["message"]
+                        st.rerun()
+                    st.success(response.json()["message"])
+            except requests.RequestException as exc:
+                auth_request_error(exc)
+
+    if token and st.button("Request a new link"):
+        st.session_state.pending_reset_token = None
+        st.rerun()
+    if st.button("Back to sign in"):
+        st.session_state.pending_reset_token = None
+        st.session_state.auth_view = "login"
+        st.rerun()
+
+
+def account_request(method, payload=None):
+    response = requests.request(
+        method, f"{API_BASE_URL}/account", headers=api_headers(), json=payload, timeout=15,
+    )
+    if response.status_code == 401:
+        expire_session()
+    return response
+
+
+def show_account_settings():
+    st.header("Account settings")
+    try:
+        response = account_request("GET")
+        response.raise_for_status()
+        profile = response.json()
+    except requests.RequestException as exc:
+        auth_request_error(exc)
+        return
+
+    st.text(f"Email address: {profile['email']}")
+    if not profile["can_manage"]:
+        st.caption("Demo accounts are managed by the administrator.")
+        return
+
+    with st.form("account_profile"):
+        name = st.text_input("Full name", value=profile["full_name"], max_chars=100)
+        save_name = st.form_submit_button("Save name", type="primary")
+
+    if save_name:
+        if not name.strip():
+            st.warning("Enter your full name.")
+        else:
+            try:
+                response = account_request("PATCH", {"full_name": name.strip()})
+                response.raise_for_status()
+                st.success("Name updated.")
+            except requests.RequestException as exc:
+                auth_request_error(exc)
+
+    with st.expander("Delete account"):
+        st.warning("This permanently deletes your account, saved reports, and research memory.")
+        with st.form("delete_account", clear_on_submit=True):
+            password = st.text_input("Current password", type="password")
+            confirmed = st.checkbox("I understand this cannot be undone.")
+            delete = st.form_submit_button("Permanently delete my account")
+
+        if delete:
+            if not password or not confirmed:
+                st.warning("Enter your current password and confirm deletion.")
+                return
+            try:
+                response = account_request("DELETE", {"password": password})
+                if response.status_code == 400:
+                    st.error("Could not confirm your current password.")
+                    return
+                response.raise_for_status()
+                clear_user_session()
+                st.session_state.flash_message = response.json()["message"]
+                st.rerun()
+            except requests.RequestException as exc:
+                auth_request_error(exc)
+
+
+if "reset_token" in st.query_params:
+    reset_token = st.query_params["reset_token"]
+    st.query_params.clear()
+    if 0 < len(reset_token) <= 256:
+        clear_user_session()
+        st.session_state.pending_reset_token = reset_token
+        st.session_state.auth_view = "forgot"
+
+
 # Capture verification tokens and clear the URL immediately.
 if "verify_token" in st.query_params:
     raw_token = st.query_params.get("verify_token", "")
@@ -470,6 +590,9 @@ if not st.session_state.token:
         elif st.session_state.auth_view == "verify":
             show_verification()
 
+        elif st.session_state.auth_view == "forgot":
+            show_password_reset()
+
         else:
             st.markdown(
                 '''<div class="tr-auth-heading">
@@ -516,6 +639,10 @@ if not st.session_state.token:
                     except requests.RequestException:
                         st.error("An unexpected login error occurred.")
 
+            if st.button("Forgot password?", use_container_width=True):
+                st.session_state.auth_view = "forgot"
+                st.rerun()
+
             if st.button(
                 "Create a new account",
                 use_container_width=True,
@@ -551,6 +678,7 @@ with st.sidebar:
     )
     st.markdown('<div class="tr-section-label">WORKSPACE</div>', unsafe_allow_html=True)
     if st.button("＋  New research", type="primary", use_container_width=True):
+        st.session_state.show_settings = False
         st.session_state.selected_report = None
         st.session_state.last_result = None
         st.session_state.last_query = ""
@@ -582,6 +710,7 @@ with st.sidebar:
                 key=f"history_{item['id']}",
                 use_container_width=True,
             ):
+                st.session_state.show_settings = False
                 st.session_state.selected_report = item
                 st.rerun()
 
@@ -592,8 +721,16 @@ with st.sidebar:
         f'<span>{escape(str(st.session_state.email or ""))}</span></div>',
         unsafe_allow_html=True,
     )
+    if st.button("Account settings", use_container_width=True):
+        st.session_state.show_settings = True
+        st.rerun()
     if st.button("Log out  ↗", use_container_width=True):
         logout()
+
+
+if st.session_state.show_settings:
+    show_account_settings()
+    st.stop()
 
 
 selected = st.session_state.selected_report

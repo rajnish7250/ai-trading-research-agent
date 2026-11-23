@@ -4,6 +4,7 @@ import time
 
 from langchain_core.messages import HumanMessage
 from graphs.market_graph import graph
+from memory.vector_store import get_vector_db
 
 logger = logging.getLogger(__name__)
 
@@ -53,3 +54,8 @@ def perform_research(query: str, user_id: str):
         )
 
         raise
+
+
+def clear_research_memory(user_id: str) -> None:
+    get_vector_db().delete(where={"user_id": user_id})
+    graph.checkpointer.delete_thread(f"user_{user_id}")

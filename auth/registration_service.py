@@ -2,7 +2,7 @@
 import re
 import sqlite3
 
-from auth.password import hash_password
+from auth.password import hash_password, validate_new_password
 from auth.service import is_email_registered
 from auth.user_repository import create_user
 
@@ -32,15 +32,7 @@ def register_user(
     ):
         raise ValueError("Enter a valid email address.")
 
-    if not isinstance(password, str) or len(password) < 12:
-        raise ValueError(
-            "Password must contain at least 12 characters."
-        )
-
-    if len(password.encode("utf-8")) > 72:
-        raise ValueError(
-            "Password is too long for the current password system."
-        )
+    validate_new_password(password)
 
     if is_email_registered(email):
         raise DuplicateEmailError("Email is already registered.")
