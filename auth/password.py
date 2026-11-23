@@ -18,3 +18,15 @@ def verify_password(
         plain_password,
         hashed_password,
     )
+
+
+def validate_new_password(password: str) -> None:
+    if not isinstance(password, str) or len(password) < 12:
+        raise ValueError(
+            "Password must contain at least 12 characters."
+        )
+
+    if len(password.encode("utf-8")) > 72:
+        raise ValueError(
+            "Password is too long for the current password system."
+        )

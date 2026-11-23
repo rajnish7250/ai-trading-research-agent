@@ -5,7 +5,11 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 
 
 def build_verification_url(raw_token: str) -> str:
-    """Build the public Streamlit email verification link."""
+    return build_public_token_url("verify_token", raw_token)
+
+
+def build_public_token_url(parameter: str, raw_token: str) -> str:
+    """Build a link on the configured public app origin."""
 
     load_dotenv()
 
@@ -32,10 +36,10 @@ def build_verification_url(raw_token: str) -> str:
         "127.0.0.1",
     ):
         raise ValueError(
-            "HTTPS is required for non-local verification links."
+            "HTTPS is required for non-local email links."
         )
 
-    query = urlencode({"verify_token": raw_token})
+    query = urlencode({parameter: raw_token})
 
     return urlunsplit((
         parts.scheme,

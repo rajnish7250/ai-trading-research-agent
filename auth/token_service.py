@@ -8,7 +8,11 @@ VERIFICATION_TOKEN_MINUTES = 30
 
 
 def generate_verification_token() -> tuple[str, str, str]:
-    """Generate a secure verification token and its metadata."""
+    return generate_auth_token(VERIFICATION_TOKEN_MINUTES)
+
+
+def generate_auth_token(minutes: int) -> tuple[str, str, str]:
+    """Generate an expiring token and its database fingerprint."""
 
     # Generate a cryptographically secure random token.
     raw_token = secrets.token_urlsafe(32)
@@ -18,10 +22,9 @@ def generate_verification_token() -> tuple[str, str, str]:
         raw_token.encode("utf-8")
     ).hexdigest()
 
-    # The ticket expires after 30 minutes.
     expires_at = (
         datetime.now(timezone.utc)
-        + timedelta(minutes=VERIFICATION_TOKEN_MINUTES)
+        + timedelta(minutes=minutes)
     ).isoformat()
 
     return raw_token, token_hash, expires_at

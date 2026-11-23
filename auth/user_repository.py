@@ -12,6 +12,7 @@ def init_users_db() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     with closing(sqlite3.connect(DB_PATH)) as connection:
+        connection.execute("BEGIN IMMEDIATE")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -28,6 +29,11 @@ def init_users_db() -> None:
             )
             """
         )
+        columns = connection.execute("PRAGMA table_info(users)").fetchall()
+        if not any(column[1] == "session_version" for column in columns):
+            connection.execute(
+                "ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0"
+            )
         connection.commit()
 
 def create_user(
@@ -93,7 +99,8 @@ def get_user_by_email(email: str) -> dict | None:
                 full_name,
                 hashed_password,
                 is_verified,
-                disabled
+                disabled,
+                session_version
             FROM users
             WHERE email = ?
             """,
@@ -110,4 +117,5 @@ def get_user_by_email(email: str) -> dict | None:
         "hashed_password": row["hashed_password"],
         "is_verified": bool(row["is_verified"]),
         "disabled": bool(row["disabled"]),
+        "session_version": row["session_version"],
     }
