@@ -231,3 +231,21 @@ def test_research_failure_is_logged_and_returns_safe_error(
 
     assert "Research request failed" in caplog.text
     assert "RuntimeError" in caplog.text
+
+def test_research_rejects_session_revoked_while_waiting_for_lock(monkeypatch):
+    user = {"email": "reset@example.com", "id": 1, "session_version": 0}
+    accounts = iter([user, {**user, "session_version": 1}])
+    monkeypatch.setattr("auth.dependencies.get_user", lambda email: next(accounts))
+    token = create_access_token({"sub": user["email"], "uid": 1, "sv": 0})
+
+    def unexpected_research(**kwargs):
+        raise AssertionError("Research ran with a revoked session.")
+
+    monkeypatch.setattr("main.perform_research", unexpected_research)
+    response = client.post(
+        "/research",
+        json={"query": "Analyze BTC-USD"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
