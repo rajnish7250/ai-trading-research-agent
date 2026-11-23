@@ -37,10 +37,10 @@ from auth.schemas import (
 )
 
 from fastapi.security import OAuth2PasswordRequestForm
-from auth.service import authenticate_user, get_user
+from auth.service import authenticate_user
 from auth import account_service
 from auth.jwt_handler import create_access_token
-from auth.dependencies import credentials_exception, get_current_user
+from auth.dependencies import credentials_exception, ensure_account_session, get_current_user
 from auth.verification_service import verify_email_token
 from auth.resend_verification_service import (
     request_verification_resend,
@@ -381,16 +381,6 @@ def research(
                 status_code=500,
                 detail="Internal Server Error",
             )
-
-
-def ensure_account_session(user: dict) -> None:
-    latest = get_user(user["email"])
-    if (
-        not latest or latest["disabled"]
-        or latest.get("id") != user.get("id")
-        or latest.get("session_version") != user.get("session_version")
-    ):
-        raise credentials_exception
 
 
 @app.get("/research/history")

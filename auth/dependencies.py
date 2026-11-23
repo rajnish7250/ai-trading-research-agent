@@ -32,18 +32,23 @@ def get_current_user(
 
     user = get_user(email)
 
-    if user is None:
-        raise credentials_exception
+    return require_active_session(user, payload.get("uid"), payload.get("sv"))
 
-    if user.get("disabled", False):
-        raise credentials_exception
 
-    if user.get("is_verified", True) is False:
-        raise credentials_exception
-
-    if (payload.get("uid"), payload.get("sv")) != (
-        user.get("id"), user.get("session_version")
+def require_active_session(user: dict | None, user_id, session_version) -> dict:
+    if (
+        user is None
+        or user.get("disabled", False)
+        or user.get("is_verified", True) is False
+        or (user.get("id"), user.get("session_version")) != (user_id, session_version)
     ):
         raise credentials_exception
 
     return user
+
+
+def ensure_account_session(user: dict) -> None:
+    """Recheck the session after acquiring the research lock."""
+    require_active_session(
+        get_user(user["email"]), user.get("id"), user.get("session_version"),
+    )
